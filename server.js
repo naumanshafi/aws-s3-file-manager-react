@@ -4,6 +4,9 @@ const { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand, G
 const { STSClient, AssumeRoleCommand } = require('@aws-sdk/client-sts');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const multer = require('multer');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = 3001;
@@ -354,6 +357,115 @@ app.post('/api/s3/presigned', async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error('Presigned URL error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Schema validation endpoint
+app.post('/api/schema/validate', upload.fields([
+  { name: 'schema', maxCount: 1 },
+  { name: 'data', maxCount: 1 }
+]), async (req, res) => {
+  let schemaFilePath = null;
+  let dataFilePath = null;
+  
+  try {
+    if (!req.files || !req.files.schema || !req.files.data) {
+      return res.status(400).json({ 
+        error: 'Both schema and data files are required' 
+      });
+    }
+    
+    const schemaFile = req.files.schema[0];
+    const dataFile = req.files.data[0];
+    
+    // Create temporary files
+    const tempDir = path.join(__dirname, 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    const timestamp = Date.now();
+    schemaFilePath = path.join(tempDir, `schema_${timestamp}.json`);
+    dataFilePath = path.join(tempDir, `data_${timestamp}.json`);
+    
+    // Write uploaded files to temporary location
+    fs.writeFileSync(schemaFilePath, schemaFile.buffer);
+    fs.writeFileSync(dataFilePath, dataFile.buffer);
+    
+    // Call Python validation script
+    const pythonScript = path.join(__dirname, 'schema_validator.py');
+    const pythonPath = path.join(__dirname, 'venv', 'bin', 'python');
+    const pythonProcess = spawn(pythonPath, [pythonScript, schemaFilePath, dataFilePath]);
+    
+    let output = '';
+    let errorOutput = '';
+    
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+    
+    pythonProcess.on('close', (code) => {
+      // Clean up temporary files
+      try {
+        if (fs.existsSync(schemaFilePath)) fs.unlinkSync(schemaFilePath);
+        if (fs.existsSync(dataFilePath)) fs.unlinkSync(dataFilePath);
+      } catch (cleanupError) {
+        console.error('Error cleaning up temp files:', cleanupError);
+      }
+      
+      if (code === 0) {
+        try {
+          const result = JSON.parse(output);
+          res.json(result);
+        } catch (parseError) {
+          console.error('Error parsing Python output:', parseError);
+          res.status(500).json({ 
+            error: 'Failed to parse validation results',
+            details: output 
+          });
+        }
+      } else {
+        console.error('Python script error:', errorOutput);
+        res.status(500).json({ 
+          error: 'Schema validation failed',
+          details: errorOutput || output 
+        });
+      }
+    });
+    
+    pythonProcess.on('error', (error) => {
+      console.error('Failed to start Python process:', error);
+      
+      // Clean up temporary files
+      try {
+        if (fs.existsSync(schemaFilePath)) fs.unlinkSync(schemaFilePath);
+        if (fs.existsSync(dataFilePath)) fs.unlinkSync(dataFilePath);
+      } catch (cleanupError) {
+        console.error('Error cleaning up temp files:', cleanupError);
+      }
+      
+      res.status(500).json({ 
+        error: 'Failed to execute validation script',
+        details: error.message 
+      });
+    });
+    
+  } catch (error) {
+    console.error('Schema validation error:', error);
+    
+    // Clean up temporary files
+    try {
+      if (schemaFilePath && fs.existsSync(schemaFilePath)) fs.unlinkSync(schemaFilePath);
+      if (dataFilePath && fs.existsSync(dataFilePath)) fs.unlinkSync(dataFilePath);
+    } catch (cleanupError) {
+      console.error('Error cleaning up temp files:', cleanupError);
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
