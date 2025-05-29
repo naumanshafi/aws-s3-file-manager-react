@@ -21,3 +21,19 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Deployment and PM2 logs
+/logs
+*.log
+pm2.log
+.pm2
+
+# Environment variables
+.env
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
