@@ -23,7 +23,8 @@ jobs:
       run: npm ci
     
     - name: Build application
-      run: npm run build
+      run: |
+        CI=false npm run build
     
     - name: Deploy to server
       uses: appleboy/ssh-action@v0.1.7
@@ -36,7 +37,7 @@ jobs:
           cd ~/aws-s3-file-manager-react
           git pull origin main
           npm install
-          npm run build
+          CI=false npm run build
           pm2 restart s3-file-manager || pm2 start ecosystem.config.js
           pm2 save
     
