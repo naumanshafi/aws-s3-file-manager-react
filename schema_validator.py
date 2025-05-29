@@ -23,8 +23,11 @@ def validate_workitems(workitems, schema):
     """
     Validate each item in the 'workitems' array against the schema.
     """
-    output_schema = schema["outputDataDefinition"]["outputSchema"]
-    
+    if "outputDataDefinition" in schema:
+        output_schema = schema["outputDataDefinition"]["outputSchema"]
+    else:
+        # Direct schema without wrapper
+        output_schema = schema
     # Fix the regex patterns before validation
     fix_regex_patterns(output_schema)
     

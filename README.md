@@ -342,6 +342,230 @@ REACT_APP_AWS_REGION=us-east-1
 REACT_APP_API_URL=https://api.yourdomain.com
 ```
 
+## 🚀 Automated Deployment (CI/CD)
+
+This project includes automated deployment using GitHub Actions and PM2 for process management.
+
+### 🔧 Prerequisites for Automated Deployment
+
+1. **GCP VM or any Linux server** with SSH access
+2. **GitHub repository** for your code
+3. **SSH key pair** for server access
+
+### 📋 Step 1: Server Setup
+
+1. **Copy the setup script to your server:**
+```bash
+scp setup-server.sh ubuntu@your-server-ip:~/
+```
+
+2. **Run the setup script on your server:**
+```bash
+ssh ubuntu@your-server-ip
+chmod +x setup-server.sh
+./setup-server.sh
+```
+
+This script will:
+- Install Node.js 18.x
+- Install PM2 globally
+- Install Git
+- Configure firewall (ports 22, 3000, 5000)
+- Set up PM2 startup scripts
+
+### 📋 Step 2: GitHub Repository Setup
+
+1. **Create a GitHub repository** and push your code:
+```bash
+cd aws-s3-file-manager-react
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/yourusername/aws-s3-file-manager-react.git
+git push -u origin main
+```
+
+2. **Add GitHub Secrets** for deployment (in your GitHub repo: Settings → Secrets and variables → Actions):
+   - `HOST`: `104.198.177.87` (your server IP)
+   - `USERNAME`: `ubuntu`
+   - `PORT`: `22`
+   - `PRIVATE_KEY`: Your private SSH key content (the one that pairs with your public key)
+
+### 📋 Step 3: Clone Repository on Server
+
+```bash
+ssh ubuntu@your-server-ip
+git clone https://github.com/yourusername/aws-s3-file-manager-react.git
+cd aws-s3-file-manager-react
+npm install
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+### 🤖 How Automated Deployment Works
+
+Once set up, every push to the `main` branch will:
+
+1. **Build** the application
+2. **Deploy** to your server via SSH
+3. **Install** dependencies
+4. **Restart** the application using PM2
+5. **Verify** the deployment health
+
+The GitHub Actions workflow (`.github/workflows/deploy.yml`) handles this automatically.
+
+### 📋 Manual Deployment Script
+
+For manual deployments, use the included deployment script:
+
+```bash
+# Make script executable (first time only)
+chmod +x deploy.sh
+
+# Deploy to server
+./deploy.sh
+```
+
+The deployment script will:
+- 📦 Build the application locally
+- 📤 Upload files to the server (excluding node_modules)
+- 🔧 Install production dependencies
+- 🔄 Restart the application with PM2
+- 🏥 Check application health
+
+### 🔍 PM2 Process Management
+
+**View application status:**
+```bash
+ssh ubuntu@your-server-ip "pm2 status"
+```
+
+**View application logs:**
+```bash
+ssh ubuntu@your-server-ip "pm2 logs s3-file-manager"
+```
+
+**Restart application manually:**
+```bash
+ssh ubuntu@your-server-ip "pm2 restart s3-file-manager"
+```
+
+**Stop application:**
+```bash
+ssh ubuntu@your-server-ip "pm2 stop s3-file-manager"
+```
+
+### 🌐 Access Your Application
+
+After successful deployment, your application will be available at:
+- **Backend API**: `http://your-server-ip:5000`
+- **Frontend**: You may need to set up a reverse proxy (nginx) to serve the React build files
+
+### 🔧 Setting up Nginx (Recommended)
+
+1. **Install Nginx on your server:**
+```bash
+ssh ubuntu@your-server-ip
+sudo apt install nginx -y
+```
+
+2. **Create Nginx configuration:**
+```bash
+sudo nano /etc/nginx/sites-available/s3-file-manager
+```
+
+3. **Add this configuration:**
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com your-server-ip;
+
+    # Serve React build files
+    location / {
+        root /home/ubuntu/aws-s3-file-manager-react/build;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API requests to Node.js backend
+    location /api/ {
+        proxy_pass http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+4. **Enable the site:**
+```bash
+sudo ln -s /etc/nginx/sites-available/s3-file-manager /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+### 🔒 SSL Setup (Optional but Recommended)
+
+```bash
+# Install Certbot
+sudo apt install certbot python3-certbot-nginx -y
+
+# Get SSL certificate
+sudo certbot --nginx -d your-domain.com
+
+# Auto-renewal is set up automatically
+```
+
+### 📊 Deployment Monitoring
+
+Monitor your deployment with these commands:
+
+```bash
+# Check application health
+curl http://your-server-ip:5000/health
+
+# Monitor PM2 processes
+ssh ubuntu@your-server-ip "pm2 monit"
+
+# Check system resources
+ssh ubuntu@your-server-ip "htop"
+```
+
+### 🔄 Rollback Strategy
+
+If deployment fails, you can quickly rollback:
+
+```bash
+ssh ubuntu@your-server-ip
+cd aws-s3-file-manager-react
+git log --oneline -5  # See recent commits
+git checkout PREVIOUS_COMMIT_HASH
+npm install
+pm2 restart s3-file-manager
+```
+
+### 🚨 Deployment Troubleshooting
+
+**Common deployment issues:**
+
+1. **SSH Connection Failed**: Check if your SSH key is correctly added to GitHub secrets
+2. **PM2 Process Not Starting**: Check logs with `pm2 logs s3-file-manager`
+3. **Build Failures**: Ensure all dependencies are installed locally
+4. **Permission Denied**: Check file permissions on the server
+
+**Debug deployment:**
+```bash
+# Check GitHub Actions logs in your repository
+# Monitor server logs during deployment
+ssh ubuntu@your-server-ip "tail -f ~/aws-s3-file-manager-react/logs/combined.log"
+```
+
 ## 🐛 Troubleshooting
 
 ### Common Issues
