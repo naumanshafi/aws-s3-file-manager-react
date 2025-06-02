@@ -1,6 +1,6 @@
 import { S3File, S3Folder, S3Config } from '../types';
 
-const API_BASE_URL = 'http://localhost:3001/api/s3';
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api/s3';
 
 class ApiService {
   private isInitialized = false;

@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 5000;
 
 // Set AWS profile for the server
 process.env.AWS_PROFILE = 'amazon';
@@ -19,11 +19,14 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Enable CORS
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: ['http://104.198.177.87:5000', 'http://104.198.177.87', 'http://localhost:3000'],
   credentials: true
 }));
 
 app.use(express.json());
+
+// Serve static files from React build directory
+app.use(express.static(path.join(__dirname, 'build')));
 
 let s3Client = null;
 let bucketName = '';
@@ -475,7 +478,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'S3 API server is running' });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 S3 API server running on http://localhost:${PORT}`);
-  console.log(`📡 Serving S3 operations for React app on http://localhost:3000`);
+// Catch-all handler: send back React's index.html file for any non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 S3 API server running on http://0.0.0.0:${PORT}`);
+  console.log(`📡 Accessible at http://104.198.177.87:${PORT}`);
 }); 

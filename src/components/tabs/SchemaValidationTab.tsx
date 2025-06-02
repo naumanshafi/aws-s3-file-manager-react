@@ -63,7 +63,9 @@ const SchemaValidationTab: React.FC = () => {
     formData.append('schema', schemaFile);
     formData.append('data', dataFile);
 
-    const response = await fetch('http://localhost:3001/api/schema/validate', {
+    const apiUrl = process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL.replace('/api/s3', '')}/api/schema/validate` : '/api/schema/validate';
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       body: formData,
     });
