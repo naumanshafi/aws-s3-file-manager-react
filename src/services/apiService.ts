@@ -5,6 +5,25 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || '/api/s3';
 class ApiService {
   private isInitialized = false;
 
+  // Helper method to handle API responses and check for expired tokens
+  private async handleResponse(response: Response): Promise<any> {
+    if (!response.ok) {
+      const error = await response.json();
+      
+      // Check for expired token error
+      if (response.status === 401 && error.error === 'TOKEN_EXPIRED') {
+        // Create a special error type that the frontend can catch
+        const expiredError = new Error(error.message || 'Your session has expired');
+        (expiredError as any).isTokenExpired = true;
+        throw expiredError;
+      }
+      
+      throw new Error(error.error || 'Request failed');
+    }
+    
+    return await response.json();
+  }
+
   async initialize(config: S3Config): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/init`, {
       method: 'POST',
@@ -28,13 +47,7 @@ class ApiService {
     }
 
     const response = await fetch(`${API_BASE_URL}/test`);
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Connection test failed');
-    }
-
-    return await response.json();
+    return await this.handleResponse(response);
   }
 
   async listTopLevelFolders(): Promise<S3Folder[]> {
@@ -43,13 +56,7 @@ class ApiService {
     }
 
     const response = await fetch(`${API_BASE_URL}/folders`);
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to list folders');
-    }
-
-    return await response.json();
+    return await this.handleResponse(response);
   }
 
   async listSubfolders(prefix: string): Promise<S3Folder[]> {
@@ -58,13 +65,7 @@ class ApiService {
     }
 
     const response = await fetch(`${API_BASE_URL}/folders?prefix=${encodeURIComponent(prefix)}`);
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to list subfolders');
-    }
-
-    return await response.json();
+    return await this.handleResponse(response);
   }
 
   async listFiles(prefix: string = ''): Promise<S3File[]> {

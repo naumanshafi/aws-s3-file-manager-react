@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Set AWS profile for the server
 process.env.AWS_PROFILE = 'amazon';
@@ -19,7 +19,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Enable CORS
 app.use(cors({
-  origin: ['http://104.198.177.87:5000', 'http://104.198.177.87', 'http://localhost:3000'],
+  origin: ['http://104.198.177.87:5001', 'http://104.198.177.87', 'http://localhost:3000'],
   credentials: true
 }));
 
@@ -32,6 +32,30 @@ let s3Client = null;
 let bucketName = '';
 let isInitializing = false;
 let lastConfig = null;
+let tokenExpirationTime = null;
+
+// Helper function to check if tokens are expired
+function areTokensExpired() {
+  if (!tokenExpirationTime) return false;
+  return Date.now() > tokenExpirationTime;
+}
+
+// Helper function to handle expired token errors
+function handleExpiredTokenError(res, error) {
+  if (error.name === 'TokenRefreshRequired' || 
+      error.message.includes('token has expired') || 
+      error.message.includes('security token included in the request is expired') ||
+      error.Code === 'TokenRefreshRequired' ||
+      areTokensExpired()) {
+    console.log('🔒 Tokens have expired, client needs to reconnect');
+    return res.status(401).json({ 
+      error: 'TOKEN_EXPIRED',
+      message: 'Your session has expired. Please reconnect to AWS.',
+      expired: true 
+    });
+  }
+  return null; // Not an expired token error
+}
 
 // Initialize S3 client with role assumption
 app.post('/api/s3/init', async (req, res) => {
@@ -116,11 +140,15 @@ app.post('/api/s3/init', async (req, res) => {
       const assumeRoleCommand = new AssumeRoleCommand({
         RoleArn: roleArn,
         RoleSessionName: sessionName,
-        DurationSeconds: 3600, // 1 hour
+        DurationSeconds: 43200, // 12 hours (maximum allowed)
       });
       
       const assumeRoleResponse = await stsClient.send(assumeRoleCommand);
       const tempCredentials = assumeRoleResponse.Credentials;
+      
+      // Store token expiration time (12 hours from now)
+      tokenExpirationTime = Date.now() + (43200 * 1000); // 12 hours in milliseconds
+      console.log('🕒 Tokens will expire at:', new Date(tokenExpirationTime).toISOString());
       
       // Create S3 client with temporary credentials
       s3Client = new S3Client({
@@ -135,6 +163,9 @@ app.post('/api/s3/init', async (req, res) => {
       console.log('Successfully assumed role and created S3 client');
     } else {
       console.log('Using direct credentials (no role assumption)');
+      // Clear token expiration since we're using permanent credentials
+      tokenExpirationTime = null;
+      
       // Use credentials directly
       s3Client = new S3Client({
         region,
@@ -191,6 +222,11 @@ app.get('/api/s3/test', async (req, res) => {
     });
   } catch (error) {
     console.error('S3 test error:', error);
+    
+    // Check if this is an expired token error
+    const expiredResponse = handleExpiredTokenError(res, error);
+    if (expiredResponse) return expiredResponse;
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -230,6 +266,11 @@ app.get('/api/s3/folders', async (req, res) => {
     res.json(folders.sort((a, b) => a.name.localeCompare(b.name)));
   } catch (error) {
     console.error('List folders error:', error);
+    
+    // Check if this is an expired token error
+    const expiredResponse = handleExpiredTokenError(res, error);
+    if (expiredResponse) return expiredResponse;
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -268,6 +309,11 @@ app.get('/api/s3/files', async (req, res) => {
     res.json(files.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified)));
   } catch (error) {
     console.error('List files error:', error);
+    
+    // Check if this is an expired token error
+    const expiredResponse = handleExpiredTokenError(res, error);
+    if (expiredResponse) return expiredResponse;
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -296,6 +342,11 @@ app.post('/api/s3/upload', upload.single('file'), async (req, res) => {
     res.json({ success: true, message: 'File uploaded successfully' });
   } catch (error) {
     console.error('Upload error:', error);
+    
+    // Check if this is an expired token error
+    const expiredResponse = handleExpiredTokenError(res, error);
+    if (expiredResponse) return expiredResponse;
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -322,6 +373,11 @@ app.delete('/api/s3/delete', async (req, res) => {
     res.json({ success: true, message: 'File deleted successfully' });
   } catch (error) {
     console.error('Delete error:', error);
+    
+    // Check if this is an expired token error
+    const expiredResponse = handleExpiredTokenError(res, error);
+    if (expiredResponse) return expiredResponse;
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -360,6 +416,11 @@ app.post('/api/s3/presigned', async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error('Presigned URL error:', error);
+    
+    // Check if this is an expired token error
+    const expiredResponse = handleExpiredTokenError(res, error);
+    if (expiredResponse) return expiredResponse;
+    
     res.status(500).json({ error: error.message });
   }
 });

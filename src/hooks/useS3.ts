@@ -1,7 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/apiService';
 import { S3File, S3Folder } from '../types';
+import { useS3Config } from '../contexts/S3ConfigContext';
 import toast from 'react-hot-toast';
+
+// Helper function to handle API errors including token expiration
+const useApiErrorHandler = () => {
+  const { handleTokenExpiration } = useS3Config();
+  
+  return (error: any) => {
+    // Check if this is a token expiration error first
+    if (handleTokenExpiration(error)) {
+      return; // Token expiration handled, user logged out
+    }
+    
+    // Handle other errors normally
+    console.error('API Error:', error);
+    toast.error(error.message || 'An error occurred');
+  };
+};
 
 // Query keys
 export const queryKeys = {
@@ -13,9 +30,18 @@ export const queryKeys = {
 
 // Hook for fetching top-level folders
 export const useTopLevelFolders = () => {
+  const handleError = useApiErrorHandler();
+  
   return useQuery({
     queryKey: queryKeys.topLevelFolders,
-    queryFn: () => apiService.listTopLevelFolders(),
+    queryFn: async () => {
+      try {
+        return await apiService.listTopLevelFolders();
+      } catch (error) {
+        handleError(error);
+        throw error;
+      }
+    },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
   });
@@ -23,9 +49,18 @@ export const useTopLevelFolders = () => {
 
 // Hook for fetching subfolders
 export const useSubfolders = (prefix: string, enabled: boolean = true) => {
+  const handleError = useApiErrorHandler();
+  
   return useQuery({
     queryKey: queryKeys.subfolders(prefix),
-    queryFn: () => apiService.listSubfolders(prefix),
+    queryFn: async () => {
+      try {
+        return await apiService.listSubfolders(prefix);
+      } catch (error) {
+        handleError(error);
+        throw error;
+      }
+    },
     enabled: enabled && !!prefix,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -34,9 +69,18 @@ export const useSubfolders = (prefix: string, enabled: boolean = true) => {
 
 // Hook for fetching files
 export const useFiles = (prefix: string, enabled: boolean = true) => {
+  const handleError = useApiErrorHandler();
+  
   return useQuery({
     queryKey: queryKeys.files(prefix),
-    queryFn: () => apiService.listFiles(prefix),
+    queryFn: async () => {
+      try {
+        return await apiService.listFiles(prefix);
+      } catch (error) {
+        handleError(error);
+        throw error;
+      }
+    },
     enabled: enabled && prefix !== undefined,
     staleTime: 2 * 60 * 1000, // 2 minutes for files (more frequent updates)
     gcTime: 5 * 60 * 1000,
@@ -61,6 +105,7 @@ export const useDateFolders = (
 // Hook for uploading files
 export const useUploadFile = () => {
   const queryClient = useQueryClient();
+  const handleError = useApiErrorHandler();
 
   return useMutation({
     mutationFn: async ({ 
@@ -72,7 +117,12 @@ export const useUploadFile = () => {
       key: string; 
       onProgress?: (progress: number) => void;
     }) => {
-      await apiService.uploadFile(file, key, onProgress);
+      try {
+        await apiService.uploadFile(file, key, onProgress);
+      } catch (error) {
+        handleError(error);
+        throw error;
+      }
     },
     onSuccess: (_, variables) => {
       // Invalidate relevant queries
