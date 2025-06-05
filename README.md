@@ -1,32 +1,38 @@
-# AWS S3 File Manager with JSON Schema Validation
+# AWS S3 File Manager with Google OAuth
 
-A modern, professional React application for managing AWS S3 files with a beautiful Material-UI interface. Features include file upload/download, browsing, deletion, and **JSON Schema Validation** powered by Python backend.
+A modern, enterprise-grade React application for managing AWS S3 files with Google OAuth authentication and server-managed AWS configuration. Features include file upload/download, browsing, deletion, and JSON Schema validation with a beautiful Material-UI interface.
 
 ## 🚀 Features
 
+- 🔐 **Google OAuth Authentication**: Secure sign-in with enterprise Google accounts
 - 📁 **Complete File Management**: Upload, download, browse, and delete files in S3
 - ✅ **JSON Schema Validation**: Validate JSON data against schemas with detailed error reporting
 - 🎨 **Modern UI**: Beautiful Material-UI interface with responsive design
-- 🔄 **Real-time Updates**: Live progress tracking and instant feedback
+- 🔄 **Real-time Status**: Live AWS connection monitoring and progress tracking
 - 🐍 **Python Backend**: Robust schema validation using jsonschema library
 - 📊 **Smart Organization**: Project-based folder structure with date organization
-- 🔒 **Secure**: AWS IAM role support and credential management
+- 🔒 **Enterprise Security**: Server-managed AWS credentials and IAM role support
 - 📱 **Mobile Friendly**: Responsive design that works on all devices
+- 🚀 **Production Ready**: Full CI/CD pipeline with nginx, SSL, and PM2
+
+## 🌐 Live Application
+
+**Production URL**: [https://s3manager.turing.com](https://s3manager.turing.com)
 
 ## 📋 Prerequisites
 
-- **Node.js** 16+ and npm
+- **Node.js** 18+ and npm
 - **Python** 3.8+ with pip
-- **AWS Account** with S3 access
-- **AWS Credentials** (CLI, environment variables, or IAM roles)
+- **AWS Account** with S3 access and IAM role
+- **Google OAuth 2.0** client configuration
 
-## 🛠️ Installation & Setup
+## 🛠️ Quick Start
 
 ### 1. Clone and Install Dependencies
 
 ```bash
-git clone <repository-url>
-cd aws-s3-file-manager-react
+git clone https://github.com/your-username/aws-s3-file-manager-react.git
+cd aws-s3-file-manager-react/aws-s3-file-manager-react
 npm install
 ```
 
@@ -46,21 +52,29 @@ source venv/bin/activate
 pip install jsonschema
 ```
 
-### 3. Environment Configuration (Optional)
+### 3. Local Development Setup
 
-Create a `.env` file in the root directory:
-```env
-REACT_APP_S3_BUCKET_NAME=your-bucket-name
-REACT_APP_AWS_REGION=us-east-1
-REACT_APP_AWS_ACCESS_KEY_ID=your-access-key
-REACT_APP_AWS_SECRET_ACCESS_KEY=your-secret-key
+For local development, create a `.env` file:
+```bash
+# Google OAuth
+REACT_APP_GOOGLE_CLIENT_ID=549557403268-707u7eagk8bbknhdg95p9kaukak74voq.apps.googleusercontent.com
+REACT_APP_API_URL=http://localhost:5001/api
+PORT=3000
+BACKEND_PORT=5001
+
+# AWS Configuration (backend only)
+AWS_REGION=us-east-1
+AWS_S3_BUCKET_NAME=your-bucket-name
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_ROLE_ARN=arn:aws:iam::123456789012:role/your-role-name
 ```
 
 ### 4. Start the Application
 
 **Terminal 1 - Backend Server:**
 ```bash
-npm run server
+npm run dev
 ```
 
 **Terminal 2 - Frontend Development Server:**
@@ -71,26 +85,49 @@ npm start
 **Open your browser:**
 Navigate to `http://localhost:3000`
 
+## 🔐 Authentication & Configuration
+
+### Google OAuth Setup
+
+The application uses Google OAuth for authentication. For local development:
+
+1. **Configure Google Cloud Console**:
+   - Add `http://localhost:3000` to authorized origins
+   - Add `http://localhost:3000` to authorized redirect URIs
+
+2. **Use Test Mode**: Click "Test Mode (Development Only)" button for immediate access during local development
+
+### Server-Managed AWS Configuration
+
+AWS credentials are now managed on the server for enhanced security:
+
+- ✅ **No client-side credential exposure**
+- ✅ **Automatic IAM role token refresh**
+- ✅ **Environment-based configuration**
+- ✅ **Real-time connection monitoring**
+
 ## 🎯 Application Architecture
 
-The application consists of two main components:
+### Development Environment
+```
+Browser → React Dev Server (Port 3000) → Node.js Backend (Port 5001) → AWS S3
+```
 
-- **Frontend (React)**: Runs on `http://localhost:3000`
-- **Backend (Node.js + Python)**: Runs on `http://localhost:3001`
+### Production Environment
+```
+Internet → nginx (Port 443) → Static React Files + Node.js Backend → AWS S3
+                             ↓
+                    Google OAuth Authentication
+```
 
-The backend handles S3 operations and schema validation by calling Python scripts.
+## 📖 Usage Guide
 
-## 📖 Complete Usage Guide
+### 🔧 Getting Started
 
-### 🔧 Initial Configuration
-
-1. **Open the application** at `http://localhost:3000`
-2. **Enter AWS credentials** in the configuration screen:
-   - AWS Access Key ID
-   - AWS Secret Access Key
-   - AWS Region (e.g., `us-east-1`)
-   - S3 Bucket Name
-   - IAM Role ARN (optional)
+1. **Sign In**: Use Google OAuth or Test Mode (local development)
+2. **Check Status**: View AWS S3 connection status on the dashboard
+3. **Manage Files**: Upload, download, browse, and delete files
+4. **Validate Schemas**: Use JSON schema validation for data integrity
 
 ### 📁 File Management Features
 
@@ -100,75 +137,34 @@ The backend handles S3 operations and schema validation by calling Python script
 - Choose or create a date folder
 - **Drag & drop files** or click to select
 - Monitor **real-time upload progress**
-- Files are organized in: `bucket/project/inputData/date/annotation_inputs/input_files/`
 
 #### 2. **Download Files**
 - Go to the **Download** tab
 - Select project and date folder
-- Browse available files in the inputData directory
+- Browse available files
 - Click **download button** for instant file download
-- Files maintain their original names and structure
 
 #### 3. **Browse S3 Bucket**
 - Use the **Browse** tab for complete bucket exploration
 - Navigate through folders with **breadcrumb navigation**
-- View detailed file information:
-  - File size (formatted: KB, MB, GB)
-  - Last modified date
-  - File type and extension
-- **Real-time folder and file listing**
+- View detailed file information (size, date, type)
 
 #### 4. **Delete Files**
 - Access the **Delete** tab
 - Select project and date for outputData
 - View files available for deletion
 - **Confirm deletion** with safety warnings
-- Immediate UI updates after successful deletion
 
 ### ✅ JSON Schema Validation
 
-The **Schema Validation** tab provides powerful JSON validation capabilities:
+The **Schema Validation** tab provides powerful JSON validation:
 
-#### **How to Use Schema Validation:**
-
-1. **Navigate to Schema Validation tab**
-2. **Upload Schema File (.json)**:
-   - Drag & drop or click to select your JSON schema file
-   - Schema should contain `outputDataDefinition.outputSchema` structure
-   - Supports JSON Schema Draft 4 format
-
-3. **Upload Data File (.json)**:
-   - Upload the JSON data file you want to validate
-   - File should contain a `workitems` array
-   - Each item in the array will be validated against the schema
-
-4. **Run Validation**:
-   - Click **"Validate Schema"** button
-   - View real-time validation progress
-   - Get detailed results with error reporting
-
-#### **Validation Results:**
-
-- ✅ **Success**: Shows total items validated successfully
-- ❌ **Errors**: Detailed error messages for each invalid item
-- 📊 **Summary**: Total items, valid count, invalid count
-- 🔍 **Error Details**: Expandable section with:
-  - Item index with validation errors
-  - Specific error messages (e.g., "metadata is a required property")
-  - JSON path information
-  - Schema validation keywords
-
-#### **Schema Validation Features:**
-
-- **Regex Pattern Fixing**: Automatically fixes double-escaped regex patterns
-- **Detailed Error Reporting**: Shows exactly which items fail and why
-- **Item-by-Item Validation**: Validates each item in the `workitems` array
-- **Python-Powered**: Uses robust `jsonschema` library for accurate validation
-- **Error Categorization**: Groups errors by type and provides clear messages
+1. **Upload Schema File (.json)**
+2. **Upload Data File (.json)**
+3. **Run Validation** and view detailed results
+4. **Review Errors** with specific item-by-item feedback
 
 ## 🏗️ S3 Bucket Structure
-
-The application expects this folder structure:
 
 ```
 your-s3-bucket/
@@ -193,47 +189,26 @@ your-s3-bucket/
         └── validation-data.json
 ```
 
-## 🔧 AWS Configuration Options
-
-### 1. **Environment Variables** (Development)
-```env
-REACT_APP_AWS_ACCESS_KEY_ID=AKIA...
-REACT_APP_AWS_SECRET_ACCESS_KEY=secret...
-REACT_APP_AWS_SESSION_TOKEN=token...  # For temporary credentials
-REACT_APP_AWS_REGION=us-east-1
-REACT_APP_S3_BUCKET_NAME=my-bucket
-```
-
-### 2. **AWS CLI Configuration**
-```bash
-aws configure --profile my-profile
-aws configure set region us-east-1 --profile my-profile
-```
-
-### 3. **IAM Roles** (Production)
-- Recommended for EC2, Lambda, or other AWS services
-- Automatic credential management
-- Enhanced security with temporary credentials
-
-### 4. **Manual Configuration**
-- Enter credentials directly in the app's configuration screen
-- Supports session tokens for temporary access
-- Real-time credential validation
-
 ## 💻 Technology Stack
 
 ### Frontend
 - **React 18** with TypeScript
-- **Material-UI (MUI) v5** for beautiful UI components
-- **React Query** for efficient data fetching and caching
-- **react-dropzone** for drag & drop file uploads
+- **Material-UI (MUI) v5** for enterprise UI
+- **Google OAuth 2.0** for authentication
 - **AWS SDK v3** for S3 operations
+- **React Query** for data management
 
 ### Backend
-- **Node.js** with Express for API server
+- **Node.js** with Express
 - **Python 3.8+** for schema validation
-- **jsonschema** library for robust JSON validation
-- **Multer** for file upload handling
+- **PM2** for process management
+- **Multer** for file handling
+
+### Infrastructure
+- **nginx** reverse proxy with SSL
+- **Let's Encrypt** SSL certificates
+- **Ubuntu Server** deployment
+- **GitHub Actions** CI/CD pipeline
 
 ## 📁 Project Structure
 
@@ -241,61 +216,99 @@ aws configure set region us-east-1 --profile my-profile
 aws-s3-file-manager-react/
 ├── src/
 │   ├── components/
-│   │   ├── tabs/
-│   │   │   ├── UploadTab.tsx
-│   │   │   ├── DownloadTab.tsx
-│   │   │   ├── BrowseTab.tsx
-│   │   │   ├── DeleteTab.tsx
-│   │   │   └── SchemaValidationTab.tsx  # New!
-│   │   ├── S3Dashboard.tsx
-│   │   ├── S3ConfigSetup.tsx
-│   │   ├── FileUpload.tsx
-│   │   └── FileList.tsx
+│   │   ├── tabs/                    # Feature tabs
+│   │   ├── S3ConfigSetup.tsx        # Google OAuth component
+│   │   ├── S3StatusPanel.tsx        # AWS status dashboard
+│   │   ├── S3Dashboard.tsx          # Main dashboard
+│   │   └── FileUpload.tsx           # Upload component
 │   ├── contexts/
-│   │   └── S3ConfigContext.tsx
+│   │   └── S3ConfigContext.tsx      # Configuration context
 │   ├── hooks/
-│   │   └── useS3.ts
+│   │   └── useS3.ts                 # S3 operations hook
 │   ├── services/
-│   │   └── s3Service.ts
+│   │   └── apiService.ts            # API communication
 │   └── types/
-│       └── index.ts
-├── venv/                    # Python virtual environment
-├── schema_validator.py      # Python validation script
-├── server.js               # Backend API server
-├── package.json
-└── README.md
+│       └── index.ts                 # TypeScript definitions
+├── docs/                            # Documentation
+├── venv/                            # Python virtual environment
+├── schema_validator.py              # Python validation script
+├── server.js                       # Backend API server
+├── ecosystem.config.js              # PM2 configuration
+├── setup-server.sh                 # Ubuntu server setup script
+├── nginx-s3manager.conf            # nginx configuration
+└── package.json
 ```
 
-## 🚀 Development
+## 🚀 Production Deployment
 
-### Available Scripts
+### Automated Deployment to s3manager.turing.com
 
+The application includes a complete deployment pipeline for Ubuntu servers:
+
+#### 1. **Server Setup**
 ```bash
-npm start          # Start React development server (port 3000)
-npm run server     # Start backend API server (port 3001)
-npm run build      # Build for production
-npm test           # Run tests
+# On your Ubuntu server (104.198.177.87)
+git clone https://github.com/your-username/aws-s3-file-manager-react.git
+cd aws-s3-file-manager-react/aws-s3-file-manager-react
+chmod +x setup-server.sh
+sudo ./setup-server.sh
 ```
 
-### Development Workflow
+The setup script automatically:
+- Installs Node.js 18.x, PM2, nginx, and SSL tools
+- Configures firewall and security settings
+- Sets up nginx with SSL certificates
+- Creates proper directory structure
 
-1. **Start backend server**: `npm run server`
-2. **Start frontend**: `npm start` (in another terminal)
-3. **Make changes** to React components or Python validation
-4. **Test schema validation** with your JSON files
-5. **Commit changes**: `git add . && git commit -m "Your message"`
+#### 2. **SSL Certificate**
+```bash
+sudo certbot --nginx -d s3manager.turing.com --agree-tos --email admin@turing.com
+```
 
-## 🔒 Security Best Practices
+#### 3. **Application Deployment**
+```bash
+npm install
+npm run build
+sudo cp -r build/* /var/www/s3manager.turing.com/
+pm2 start ecosystem.config.js
+pm2 save
+```
 
-- ✅ **Never commit AWS credentials** to version control
-- ✅ **Use IAM roles** with minimal required permissions
-- ✅ **Implement proper CORS** settings on S3 buckets
-- ✅ **Use HTTPS** in production environments
-- ✅ **Validate file types** before upload
-- ✅ **Set appropriate bucket policies** for access control
+### Manual Deployment
+
+Use the included deployment script:
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+### Environment Configuration
+
+Set these environment variables on your server:
+```bash
+# AWS Configuration
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=[Your AWS Access Key]
+AWS_SECRET_ACCESS_KEY=[Your AWS Secret Key]
+AWS_ROLE_ARN=arn:aws:iam::123456789012:role/your-role
+AWS_S3_BUCKET_NAME=your-bucket-name
+AWS_SESSION_NAME=S3FileManagerSession
+
+# Server Configuration
+NODE_ENV=production
+PORT=5001
+```
+
+## 🔒 Security Features
+
+### Enhanced Security Model
+- 🔐 **Google OAuth 2.0**: Enterprise-grade authentication
+- 🛡️ **Server-side credentials**: No client-side AWS exposure
+- 🔄 **Automatic token refresh**: IAM role token management
+- 🚪 **HTTPS-only**: Production SSL with HSTS headers
+- 🔧 **Security headers**: XSS protection, frame options, content type sniffing prevention
 
 ### Required IAM Permissions
-
 ```json
 {
     "Version": "2012-10-17",
@@ -304,7 +317,7 @@ npm test           # Run tests
             "Effect": "Allow",
             "Action": [
                 "s3:GetObject",
-                "s3:PutObject",
+                "s3:PutObject", 
                 "s3:DeleteObject",
                 "s3:ListBucket"
             ],
@@ -312,312 +325,104 @@ npm test           # Run tests
                 "arn:aws:s3:::your-bucket-name",
                 "arn:aws:s3:::your-bucket-name/*"
             ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sts:AssumeRole"
+            ],
+            "Resource": "arn:aws:iam::123456789012:role/your-role-name"
         }
     ]
 }
 ```
 
-## 🚀 Production Deployment
+## 🛠️ Development
 
-### 1. Build the Application
+### Available Scripts
 ```bash
-npm run build
+npm start          # Start React development server (port 3000)
+npm run dev        # Start backend API server (port 5001)
+npm run build      # Build for production
+npm test           # Run tests
 ```
 
-### 2. Deploy Frontend
-- Upload `build/` folder to S3 static hosting
-- Configure CloudFront for global CDN
-- Set up custom domain with Route 53
+### Development with Test Mode
+For local development without Google OAuth setup:
+1. Start both servers: `npm run dev` and `npm start`
+2. Open `http://localhost:3000`
+3. Click "Test Mode (Development Only)" button
+4. Access all features immediately
 
-### 3. Deploy Backend
-- Deploy Node.js server to EC2, ECS, or Lambda
-- Ensure Python environment is available
-- Configure environment variables for production
+## 🔍 Monitoring & Health Checks
 
-### 4. Environment Variables (Production)
-```env
-NODE_ENV=production
-REACT_APP_S3_BUCKET_NAME=production-bucket
-REACT_APP_AWS_REGION=us-east-1
-REACT_APP_API_URL=https://api.yourdomain.com
-```
+### Application Monitoring
+- **Status Dashboard**: Real-time AWS S3 connection status
+- **Health Endpoint**: `GET /api/health`
+- **Configuration Check**: `GET /api/s3/config`
+- **Connection Test**: `GET /api/s3/test`
 
-## 🚀 Automated Deployment (CI/CD)
-
-This project includes automated deployment using GitHub Actions and PM2 for process management.
-
-### 🔧 Prerequisites for Automated Deployment
-
-1. **GCP VM or any Linux server** with SSH access
-2. **GitHub repository** for your code
-3. **SSH key pair** for server access
-
-### 📋 Step 1: Server Setup
-
-1. **Copy the setup script to your server:**
+### PM2 Process Management
 ```bash
-scp setup-server.sh ubuntu@your-server-ip:~/
-```
+# View status
+pm2 status
 
-2. **Run the setup script on your server:**
-```bash
-ssh ubuntu@your-server-ip
-chmod +x setup-server.sh
-./setup-server.sh
-```
+# View logs
+pm2 logs s3-file-manager
 
-This script will:
-- Install Node.js 18.x
-- Install PM2 globally
-- Install Git
-- Configure firewall (ports 22, 3000, 5000)
-- Set up PM2 startup scripts
-
-### 📋 Step 2: GitHub Repository Setup
-
-1. **Create a GitHub repository** and push your code:
-```bash
-cd aws-s3-file-manager-react
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/yourusername/aws-s3-file-manager-react.git
-git push -u origin main
-```
-
-2. **Add GitHub Secrets** for deployment (in your GitHub repo: Settings → Secrets and variables → Actions):
-   - `HOST`: `104.198.177.87` (your server IP)
-   - `USERNAME`: `ubuntu`
-   - `PORT`: `22`
-   - `PRIVATE_KEY`: Your private SSH key content (the one that pairs with your public key)
-
-### 📋 Step 3: Clone Repository on Server
-
-```bash
-ssh ubuntu@your-server-ip
-git clone https://github.com/yourusername/aws-s3-file-manager-react.git
-cd aws-s3-file-manager-react
-npm install
-pm2 start ecosystem.config.js
-pm2 save
-```
-
-### 🤖 How Automated Deployment Works
-
-Once set up, every push to the `main` branch will:
-
-1. **Build** the application
-2. **Deploy** to your server via SSH
-3. **Install** dependencies
-4. **Restart** the application using PM2
-5. **Verify** the deployment health
-
-The GitHub Actions workflow (`.github/workflows/deploy.yml`) handles this automatically.
-
-### 📋 Manual Deployment Script
-
-For manual deployments, use the included deployment script:
-
-```bash
-# Make script executable (first time only)
-chmod +x deploy.sh
-
-# Deploy to server
-./deploy.sh
-```
-
-The deployment script will:
-- 📦 Build the application locally
-- 📤 Upload files to the server (excluding node_modules)
-- 🔧 Install production dependencies
-- 🔄 Restart the application with PM2
-- 🏥 Check application health
-
-### 🔍 PM2 Process Management
-
-**View application status:**
-```bash
-ssh ubuntu@your-server-ip "pm2 status"
-```
-
-**View application logs:**
-```bash
-ssh ubuntu@your-server-ip "pm2 logs s3-file-manager"
-```
-
-**Restart application manually:**
-```bash
-ssh ubuntu@your-server-ip "pm2 restart s3-file-manager"
-```
-
-**Stop application:**
-```bash
-ssh ubuntu@your-server-ip "pm2 stop s3-file-manager"
-```
-
-### 🌐 Access Your Application
-
-After successful deployment, your application will be available at:
-- **Backend API**: `http://your-server-ip:5000`
-- **Frontend**: You may need to set up a reverse proxy (nginx) to serve the React build files
-
-### 🔧 Setting up Nginx (Recommended)
-
-1. **Install Nginx on your server:**
-```bash
-ssh ubuntu@your-server-ip
-sudo apt install nginx -y
-```
-
-2. **Create Nginx configuration:**
-```bash
-sudo nano /etc/nginx/sites-available/s3-file-manager
-```
-
-3. **Add this configuration:**
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com your-server-ip;
-
-    # Serve React build files
-    location / {
-        root /home/ubuntu/aws-s3-file-manager-react/build;
-        index index.html index.htm;
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Proxy API requests to Node.js backend
-    location /api/ {
-        proxy_pass http://localhost:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-4. **Enable the site:**
-```bash
-sudo ln -s /etc/nginx/sites-available/s3-file-manager /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
-
-### 🔒 SSL Setup (Optional but Recommended)
-
-```bash
-# Install Certbot
-sudo apt install certbot python3-certbot-nginx -y
-
-# Get SSL certificate
-sudo certbot --nginx -d your-domain.com
-
-# Auto-renewal is set up automatically
-```
-
-### 📊 Deployment Monitoring
-
-Monitor your deployment with these commands:
-
-```bash
-# Check application health
-curl http://your-server-ip:5000/health
-
-# Monitor PM2 processes
-ssh ubuntu@your-server-ip "pm2 monit"
-
-# Check system resources
-ssh ubuntu@your-server-ip "htop"
-```
-
-### 🔄 Rollback Strategy
-
-If deployment fails, you can quickly rollback:
-
-```bash
-ssh ubuntu@your-server-ip
-cd aws-s3-file-manager-react
-git log --oneline -5  # See recent commits
-git checkout PREVIOUS_COMMIT_HASH
-npm install
+# Restart application
 pm2 restart s3-file-manager
-```
 
-### 🚨 Deployment Troubleshooting
-
-**Common deployment issues:**
-
-1. **SSH Connection Failed**: Check if your SSH key is correctly added to GitHub secrets
-2. **PM2 Process Not Starting**: Check logs with `pm2 logs s3-file-manager`
-3. **Build Failures**: Ensure all dependencies are installed locally
-4. **Permission Denied**: Check file permissions on the server
-
-**Debug deployment:**
-```bash
-# Check GitHub Actions logs in your repository
-# Monitor server logs during deployment
-ssh ubuntu@your-server-ip "tail -f ~/aws-s3-file-manager-react/logs/combined.log"
+# Monitor in real-time
+pm2 monit
 ```
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
-#### **CORS Errors**
-```json
-// Add to S3 bucket CORS configuration
-[
-    {
-        "AllowedHeaders": ["*"],
-        "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
-        "AllowedOrigins": ["http://localhost:3000", "https://yourdomain.com"],
-        "ExposeHeaders": []
-    }
-]
-```
+#### **Google OAuth Errors**
+- Verify authorized origins include your domain
+- Check client ID is correctly configured
+- Ensure HTTPS is used in production
 
-#### **Schema Validation Errors**
-- ✅ Ensure Python virtual environment is activated
-- ✅ Check that `jsonschema` is installed: `pip list | grep jsonschema`
-- ✅ Verify schema file has correct structure with `outputDataDefinition.outputSchema`
-- ✅ Confirm data file contains `workitems` array
+#### **AWS Connection Issues**
+- Check server environment variables
+- Verify IAM role permissions
+- Monitor token expiration in status panel
 
-#### **Backend Connection Issues**
-- ✅ Verify backend server is running on port 3001
-- ✅ Check that both frontend and backend are running
-- ✅ Ensure no firewall blocking local connections
+#### **Deployment Issues**
+- Verify nginx configuration: `sudo nginx -t`
+- Check PM2 process status: `pm2 status`
+- Review logs: `pm2 logs s3-file-manager`
 
-#### **AWS Permission Issues**
-- ✅ Verify IAM policies allow required S3 operations
-- ✅ Check bucket policies and access control
-- ✅ Confirm credentials are valid and not expired
+### Debug Commands
+```bash
+# Check application health
+curl https://s3manager.turing.com/api/health
 
-### Debug Mode
+# Test AWS configuration
+curl https://s3manager.turing.com/api/s3/config
 
-Enable detailed logging:
-```env
-REACT_APP_DEBUG=true
-NODE_ENV=development
+# Monitor server logs
+tail -f /var/log/nginx/s3manager.turing.com.access.log
 ```
 
 ## 📝 API Endpoints
 
-The backend server provides these endpoints:
+### Authentication & Configuration
+- `GET /api/s3/config` - Get AWS configuration status
+- `GET /api/s3/test` - Test AWS connection
+- `GET /health` - Application health check
 
-- `GET /health` - Health check
-- `POST /api/s3/configure` - Configure S3 credentials
-- `GET /api/s3/folders` - List top-level folders
+### File Operations
+- `GET /api/s3/folders` - List folders
 - `POST /api/s3/upload` - Upload files
 - `GET /api/s3/files` - List files
 - `DELETE /api/s3/delete` - Delete files
-- `POST /api/schema/validate` - **Validate JSON schema** 🆕
+
+### Schema Validation
+- `POST /api/schema/validate` - Validate JSON schema
 
 ## 🤝 Contributing
 
@@ -635,23 +440,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 For issues and questions:
-
 - 📖 **Check this README** for comprehensive instructions
 - 🐛 **Review troubleshooting section** for common issues
-- 📚 **Consult AWS S3 documentation** for AWS-specific problems
 - 🎫 **Open an issue** on GitHub for bugs or feature requests
 - 💬 **Start a discussion** for general questions
 
-## 🎉 What's New
+## 🎉 Latest Updates
 
-### Latest Features
-- ✅ **JSON Schema Validation Tab** - Validate JSON data against schemas
-- ✅ **Python Backend Integration** - Robust validation using jsonschema
-- ✅ **Detailed Error Reporting** - Item-by-item validation results
-- ✅ **Improved Error Handling** - Better frontend/backend error management
-- ✅ **Material-UI Icon Fixes** - Resolved all icon import issues
+### v2.0 - Google OAuth & Server-Managed Configuration
+- ✅ **Google OAuth Authentication** - Secure enterprise sign-in
+- ✅ **Server-Managed AWS Configuration** - Enhanced security model
+- ✅ **Real-time Status Dashboard** - Live AWS connection monitoring
+- ✅ **Production Deployment Pipeline** - Complete CI/CD with nginx and SSL
+- ✅ **Test Mode for Development** - Streamlined local development workflow
+- ✅ **Enhanced Security Headers** - HSTS, XSS protection, frame options
 
 ---
 
-**Happy file managing and schema validating! 🚀**
-# Server configured for port 5000
+**🌟 Ready for enterprise deployment at [s3manager.turing.com](https://s3manager.turing.com)!**
