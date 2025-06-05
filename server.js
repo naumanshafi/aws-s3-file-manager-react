@@ -1,3 +1,7 @@
+require('dotenv').config({
+  path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local'
+});
+
 const express = require('express');
 const cors = require('cors');
 const { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
@@ -9,18 +13,65 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.BACKEND_PORT || process.env.PORT || 5001;
 
-// Set AWS profile for the server
-process.env.AWS_PROFILE = 'amazon';
+// Log environment and port information
+console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+console.log('🔌 Port source:', process.env.PORT ? 'Environment variable' : 'Default fallback');
+console.log('🚪 Selected PORT:', PORT);
+
+// AWS Configuration from environment variables
+const AWS_CONFIG = {
+  region: process.env.AWS_REGION || 'us-east-1',
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  roleArn: process.env.AWS_ROLE_ARN,
+  bucketName: process.env.AWS_S3_BUCKET_NAME,
+  sessionName: process.env.AWS_SESSION_NAME || 'S3FileManagerSession'
+};
+
+// Validate required environment variables
+const requiredEnvVars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_S3_BUCKET_NAME'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingVars);
+  console.error('Please set the following environment variables:');
+  missingVars.forEach(varName => console.error(`  - ${varName}`));
+  process.exit(1);
+}
+
+console.log('✅ AWS Configuration loaded from environment variables');
+console.log('📋 Configuration:', {
+  region: AWS_CONFIG.region,
+  bucketName: AWS_CONFIG.bucketName,
+  roleArn: AWS_CONFIG.roleArn ? 'Configured' : 'Not set',
+  accessKeyId: AWS_CONFIG.accessKeyId ? `${AWS_CONFIG.accessKeyId.substring(0, 8)}...` : 'Missing'
+});
 
 // Configure multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Enable CORS
+// Enable CORS with dynamic origins based on environment
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+  ? [
+      'http://104.198.177.87:5000', 
+      'http://104.198.177.87', 
+      'https://104.198.177.87:5000',
+      'https://104.198.177.87'
+    ]
+  : [
+      'http://localhost:3000',
+      'http://localhost:5000',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5000'
+    ];
+
 app.use(cors({
-  origin: ['http://104.198.177.87:5001', 'http://104.198.177.87', 'http://localhost:3000'],
-  credentials: true
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
@@ -29,10 +80,9 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'build')));
 
 let s3Client = null;
-let bucketName = '';
-let isInitializing = false;
-let lastConfig = null;
+let bucketName = AWS_CONFIG.bucketName;
 let tokenExpirationTime = null;
+let isInitialized = false;
 
 // Helper function to check if tokens are expired
 function areTokensExpired() {
@@ -46,113 +96,84 @@ function handleExpiredTokenError(res, error) {
       error.message.includes('token has expired') || 
       error.message.includes('security token included in the request is expired') ||
       error.Code === 'TokenRefreshRequired' ||
+      error.Code === 'ExpiredToken' ||
       areTokensExpired()) {
-    console.log('🔒 Tokens have expired, client needs to reconnect');
+    console.log('🔒 Tokens have expired, reinitializing...');
+    s3Client = null;
+    isInitialized = false;
     return res.status(401).json({ 
       error: 'TOKEN_EXPIRED',
-      message: 'Your session has expired. Please reconnect to AWS.',
+      message: 'Session has expired. Reinitializing...',
       expired: true 
     });
   }
   return null; // Not an expired token error
 }
 
-// Initialize S3 client with role assumption
-app.post('/api/s3/init', async (req, res) => {
+// Initialize S3 client with environment variables
+async function initializeS3Client() {
+  if (isInitialized && s3Client && !areTokensExpired()) {
+    console.log('✅ Using existing S3 client');
+    return true;
+  }
+
   try {
-    const { 
-      region, 
-      accessKeyId, 
-      secretAccessKey, 
-      roleArn, 
-      bucketName: bucket,
-      sessionName = 'S3FileManagerSession'
-    } = req.body;
-
-    // Check if we're already initializing to prevent concurrent requests
-    if (isInitializing) {
-      console.log('Already initializing, waiting...');
-      // Wait a bit and return success if client exists
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (s3Client) {
-        return res.json({ success: true, message: 'S3 client already initialized' });
-      }
-    }
-
-    // Check if we already have a valid client with the same config
-    const currentConfig = { region, accessKeyId, secretAccessKey, roleArn, bucketName: bucket };
-    if (s3Client && lastConfig && JSON.stringify(currentConfig) === JSON.stringify(lastConfig)) {
-      console.log('Using existing S3 client with same configuration');
-      return res.json({ success: true, message: 'S3 client already initialized with same config' });
-    }
-    
-    // Debug: Log received configuration (without sensitive data)
-    console.log('Received configuration:', {
-      region,
-      bucketName: bucket,
-      accessKeyId: accessKeyId ? `${accessKeyId.substring(0, 8)}...` : 'missing',
-      secretAccessKey: secretAccessKey ? `${secretAccessKey.substring(0, 8)}...` : 'missing',
-      roleArn: roleArn || 'not provided',
-    });
-
-    // Debug: Check for hidden characters or encoding issues
-    console.log('Credential lengths:', {
-      accessKeyIdLength: accessKeyId ? accessKeyId.length : 0,
-      secretAccessKeyLength: secretAccessKey ? secretAccessKey.length : 0,
-      expectedAccessKeyLength: 20,
-      expectedSecretKeyLength: 40,
-    });
-
-    // Debug: Check for whitespace or special characters
-    if (accessKeyId) {
-      console.log('Access Key ID starts with:', JSON.stringify(accessKeyId.substring(0, 10)));
-      console.log('Access Key ID ends with:', JSON.stringify(accessKeyId.substring(-10)));
-    }
-    if (secretAccessKey) {
-      console.log('Secret Key starts with:', JSON.stringify(secretAccessKey.substring(0, 10)));
-      console.log('Secret Key ends with:', JSON.stringify(secretAccessKey.substring(-10)));
-    }
-
-    // Validate required fields
-    if (!accessKeyId || !secretAccessKey || !region || !bucket) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: accessKeyId, secretAccessKey, region, and bucketName are required' 
-      });
-    }
-    
-    bucketName = bucket;
-    isInitializing = true;
+    console.log('🔄 Initializing S3 client...');
     
     // If roleArn is provided, assume the role
-    if (roleArn) {
-      console.log('Assuming role:', roleArn);
+    if (AWS_CONFIG.roleArn) {
+      console.log('🔐 Assuming role:', AWS_CONFIG.roleArn);
       
       // Create STS client with base credentials
       const stsClient = new STSClient({
-        region,
+        region: AWS_CONFIG.region,
         credentials: {
-          accessKeyId,
-          secretAccessKey,
+          accessKeyId: AWS_CONFIG.accessKeyId,
+          secretAccessKey: AWS_CONFIG.secretAccessKey,
         },
       });
       
-      // Assume the role
-      const assumeRoleCommand = new AssumeRoleCommand({
-        RoleArn: roleArn,
-        RoleSessionName: sessionName,
-        DurationSeconds: 43200, // 12 hours (maximum allowed)
-      });
+      // Try different session durations starting with the shortest
+      const durations = [900, 1800, 3600]; // 15 min, 30 min, 1 hour
+      let assumeRoleResponse = null;
+      let lastError = null;
       
-      const assumeRoleResponse = await stsClient.send(assumeRoleCommand);
+      for (const duration of durations) {
+        try {
+          console.log(`⏱️ Trying to assume role with ${duration} seconds duration...`);
+          const assumeRoleCommand = new AssumeRoleCommand({
+            RoleArn: AWS_CONFIG.roleArn,
+            RoleSessionName: AWS_CONFIG.sessionName,
+            DurationSeconds: duration,
+          });
+          
+          assumeRoleResponse = await stsClient.send(assumeRoleCommand);
+          console.log(`✅ Successfully assumed role with ${duration} seconds duration`);
+          
+          // Store token expiration time
+          tokenExpirationTime = Date.now() + (duration * 1000);
+          console.log('🕒 Tokens will expire at:', new Date(tokenExpirationTime).toISOString());
+          break;
+        } catch (error) {
+          console.log(`❌ Failed with ${duration} seconds:`, error.message);
+          lastError = error;
+          if (!error.message.includes('DurationSeconds exceeds')) {
+            // If it's not a duration error, no point trying other durations
+            throw error;
+          }
+        }
+      }
+      
+      if (!assumeRoleResponse) {
+        console.error('❌ Failed to assume role with any duration');
+        throw lastError || new Error('Failed to assume role');
+      }
+      
       const tempCredentials = assumeRoleResponse.Credentials;
-      
-      // Store token expiration time (12 hours from now)
-      tokenExpirationTime = Date.now() + (43200 * 1000); // 12 hours in milliseconds
-      console.log('🕒 Tokens will expire at:', new Date(tokenExpirationTime).toISOString());
       
       // Create S3 client with temporary credentials
       s3Client = new S3Client({
-        region,
+        region: AWS_CONFIG.region,
         credentials: {
           accessKeyId: tempCredentials.AccessKeyId,
           secretAccessKey: tempCredentials.SecretAccessKey,
@@ -160,41 +181,69 @@ app.post('/api/s3/init', async (req, res) => {
         },
       });
       
-      console.log('Successfully assumed role and created S3 client');
+      console.log('✅ Successfully created S3 client with assumed role');
     } else {
-      console.log('Using direct credentials (no role assumption)');
+      console.log('🔑 Using direct credentials (no role assumption)');
       // Clear token expiration since we're using permanent credentials
       tokenExpirationTime = null;
       
       // Use credentials directly
       s3Client = new S3Client({
-        region,
+        region: AWS_CONFIG.region,
         credentials: {
-          accessKeyId,
-          secretAccessKey,
+          accessKeyId: AWS_CONFIG.accessKeyId,
+          secretAccessKey: AWS_CONFIG.secretAccessKey,
         },
       });
     }
     
-    // Store the current config and mark initialization as complete
-    lastConfig = currentConfig;
-    isInitializing = false;
-    
-    res.json({ success: true, message: 'S3 client initialized successfully' });
+    isInitialized = true;
+    console.log('🚀 S3 client initialization completed successfully');
+    return true;
   } catch (error) {
-    console.error('S3 initialization error:', error);
-    isInitializing = false; // Reset flag on error
-    res.status(500).json({ error: error.message });
+    console.error('❌ S3 initialization error:', error);
+    s3Client = null;
+    isInitialized = false;
+    throw error;
   }
+}
+
+// Middleware to ensure S3 client is initialized
+async function ensureS3Client(req, res, next) {
+  try {
+    if (!isInitialized || areTokensExpired()) {
+      await initializeS3Client();
+    }
+    next();
+  } catch (error) {
+    console.error('❌ Failed to initialize S3 client:', error);
+    res.status(500).json({ 
+      error: 'AWS_INITIALIZATION_FAILED',
+      message: 'Failed to initialize AWS connection. Please check server configuration.',
+      details: error.message 
+    });
+  }
+}
+
+// Initialize S3 client on server startup
+initializeS3Client().catch(error => {
+  console.error('❌ Failed to initialize S3 client on startup:', error);
+});
+
+// Get current configuration endpoint
+app.get('/api/s3/config', (req, res) => {
+  res.json({
+    bucketName: AWS_CONFIG.bucketName,
+    region: AWS_CONFIG.region,
+    hasRole: !!AWS_CONFIG.roleArn,
+    isInitialized,
+    tokenExpires: tokenExpirationTime ? new Date(tokenExpirationTime).toISOString() : null
+  });
 });
 
 // Test connection by listing top-level folders
-app.get('/api/s3/test', async (req, res) => {
+app.get('/api/s3/test', ensureS3Client, async (req, res) => {
   try {
-    if (!s3Client) {
-      return res.status(400).json({ error: 'S3 client not initialized' });
-    }
-    
     const command = new ListObjectsV2Command({
       Bucket: bucketName,
       Delimiter: '/',
@@ -232,12 +281,8 @@ app.get('/api/s3/test', async (req, res) => {
 });
 
 // List folders
-app.get('/api/s3/folders', async (req, res) => {
+app.get('/api/s3/folders', ensureS3Client, async (req, res) => {
   try {
-    if (!s3Client) {
-      return res.status(400).json({ error: 'S3 client not initialized' });
-    }
-    
     const { prefix = '' } = req.query;
     const normalizedPrefix = prefix && !prefix.endsWith('/') ? prefix + '/' : prefix;
     
@@ -276,12 +321,8 @@ app.get('/api/s3/folders', async (req, res) => {
 });
 
 // List files
-app.get('/api/s3/files', async (req, res) => {
+app.get('/api/s3/files', ensureS3Client, async (req, res) => {
   try {
-    if (!s3Client) {
-      return res.status(400).json({ error: 'S3 client not initialized' });
-    }
-    
     const { prefix = '' } = req.query;
     const normalizedPrefix = prefix && !prefix.endsWith('/') ? prefix + '/' : prefix;
     
@@ -319,12 +360,8 @@ app.get('/api/s3/files', async (req, res) => {
 });
 
 // Upload file
-app.post('/api/s3/upload', upload.single('file'), async (req, res) => {
+app.post('/api/s3/upload', ensureS3Client, upload.single('file'), async (req, res) => {
   try {
-    if (!s3Client) {
-      return res.status(400).json({ error: 'S3 client not initialized' });
-    }
-    
     if (!req.file) {
       return res.status(400).json({ error: 'No file provided' });
     }
@@ -352,12 +389,8 @@ app.post('/api/s3/upload', upload.single('file'), async (req, res) => {
 });
 
 // Delete file
-app.delete('/api/s3/delete', async (req, res) => {
+app.delete('/api/s3/delete', ensureS3Client, async (req, res) => {
   try {
-    if (!s3Client) {
-      return res.status(400).json({ error: 'S3 client not initialized' });
-    }
-    
     const { key } = req.body;
     
     if (!key) {
@@ -383,12 +416,8 @@ app.delete('/api/s3/delete', async (req, res) => {
 });
 
 // Generate presigned URL
-app.post('/api/s3/presigned', async (req, res) => {
+app.post('/api/s3/presigned', ensureS3Client, async (req, res) => {
   try {
-    if (!s3Client) {
-      return res.status(400).json({ error: 'S3 client not initialized' });
-    }
-    
     const { key, expiresIn = 3600 } = req.body;
     
     if (!key) {

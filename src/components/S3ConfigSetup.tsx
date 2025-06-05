@@ -1,174 +1,218 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
-  TextField,
   Button,
   Typography,
   Alert,
-  InputAdornment,
-  IconButton,
-  Divider,
   Paper,
   Stack,
+  Avatar,
+  Chip,
+  Divider,
 } from '@mui/material';
 import {
-  Visibility,
-  VisibilityOff,
+  Google,
   CloudUpload,
-  Settings,
   Security,
-  AccountTree,
+  CheckCircle,
 } from '@mui/icons-material';
 import { useS3Config } from '../contexts/S3ConfigContext';
-import { S3Config } from '../types';
 
-const S3ConfigSetup: React.FC = () => {
-  const { setConfig } = useS3Config();
-  const [formData, setFormData] = useState<S3Config>({
-    bucketName: process.env.REACT_APP_S3_BUCKET_NAME || 'agi-ds-turing',
-    region: process.env.REACT_APP_AWS_REGION || 'us-east-1',
-    accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY || '',
-    roleArn: process.env.REACT_APP_AWS_ROLE_ARN || '',
-  });
-  const [showSecrets, setShowSecrets] = useState({
-    accessKey: false,
-    secretKey: false,
-  });
+// Declare Google Identity Services types
+declare global {
+  interface Window {
+    google: {
+      accounts: {
+        id: {
+          initialize: (config: any) => void;
+          prompt: () => void;
+          renderButton: (element: HTMLElement, config: any) => void;
+        };
+      };
+    };
+  }
+}
+
+interface GoogleUser {
+  id: string;
+  name: string;
+  email: string;
+  picture: string;
+}
+
+const GoogleAuthSetup: React.FC = () => {
+  const [user, setUser] = useState<GoogleUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const { setConfig } = useS3Config();
 
-  const handleInputChange = (field: keyof S3Config) => (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: event.target.value,
-    }));
-    setError(null);
-    setTestResult(null);
-  };
+  // Google OAuth Client ID
+  const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || 'your-google-client-id.googleusercontent.com';
+  
+  // Test mode for local development
+  const isLocalDevelopment = window.location.hostname === 'localhost';
 
-  const toggleShowSecret = (field: keyof typeof showSecrets) => {
-    setShowSecrets(prev => ({
-      ...prev,
-      [field]: !prev[field],
-    }));
-  };
+  useEffect(() => {
+    // Load Google Identity Services script
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogleAuth;
+    document.head.appendChild(script);
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    
-    // Prevent double-clicks
-    if (isLoading) {
-      return;
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
+
+  // Auto-render fallback button when Google services are ready
+  useEffect(() => {
+    if (window.google && !user) {
+      const timer = setTimeout(() => {
+        renderGoogleButton();
+      }, 1000);
+      
+      return () => clearTimeout(timer);
     }
-    
+  }, [window.google, user]);
+
+  const initializeGoogleAuth = () => {
+    if (window.google) {
+      try {
+        console.log('Initializing Google Auth with Client ID:', GOOGLE_CLIENT_ID);
+        
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleCredentialResponse,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+
+        console.log('Google Auth initialized successfully');
+      } catch (error) {
+        console.error('Google Auth initialization error:', error);
+        setError('Failed to initialize Google Sign-In. Please check your internet connection.');
+      }
+    } else {
+      console.error('Google Identity Services not loaded');
+      setError('Google Sign-In services are not available. Please refresh the page.');
+    }
+  };
+
+  const handleCredentialResponse = (response: any) => {
+    try {
+      console.log('Received credential response:', response);
     setIsLoading(true);
     setError(null);
 
-    try {
-      // Validate required fields - now including roleArn as mandatory
-      if (!formData.bucketName || !formData.region || !formData.accessKeyId || !formData.secretAccessKey || !formData.roleArn) {
-        throw new Error('All fields are required: Bucket name, region, access key ID, secret access key, and IAM Role ARN are mandatory for security');
+      if (!response.credential) {
+        throw new Error('No credential received from Google');
       }
 
-      // Build configuration with all required fields
-      const config: S3Config = {
-        bucketName: formData.bucketName.trim(),
-        region: formData.region.trim(),
-        accessKeyId: formData.accessKeyId.trim(),
-        secretAccessKey: formData.secretAccessKey.trim(),
-        roleArn: formData.roleArn.trim(), // Now mandatory
+      // Decode the JWT token
+      const payload = JSON.parse(atob(response.credential.split('.')[1]));
+      console.log('Decoded payload:', payload);
+      
+      const userData: GoogleUser = {
+        id: payload.sub,
+        name: payload.name,
+        email: payload.email,
+        picture: payload.picture,
       };
 
-      // Validate credential lengths
-      if (config.accessKeyId && config.accessKeyId.length !== 20) {
-        throw new Error(`Invalid Access Key ID length: ${config.accessKeyId.length} (expected 20 characters)`);
+      setUser(userData);
+      console.log('Google Auth Success:', userData);
+      
+    } catch (error) {
+      console.error('Authentication error:', error);
+      setError(`Failed to authenticate with Google: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
       }
-      if (config.secretAccessKey && config.secretAccessKey.length !== 40) {
-        throw new Error(`Invalid Secret Access Key length: ${config.secretAccessKey.length} (expected 40 characters). Check for extra characters.`);
-      }
+  };
 
-      // Debug: Log the configuration being sent (without sensitive data)
-      console.log('Sending configuration:', {
-        bucketName: config.bucketName,
-        region: config.region,
-        accessKeyId: config.accessKeyId ? `${config.accessKeyId.substring(0, 8)}...` : 'missing',
-        secretAccessKey: config.secretAccessKey ? `${config.secretAccessKey.substring(0, 8)}...` : 'missing',
-        roleArn: config.roleArn,
-      });
-
-      // Test the connection by initializing the API service and trying to list folders
-      const { apiService } = await import('../services/apiService');
-      await apiService.initialize(config);
+  const handleGoogleSignIn = () => {
+    try {
+      setError(null);
+      setIsLoading(true);
       
-      // Test connection by attempting to list top-level folders
-      const result = await apiService.testConnection();
-      
-      // If we get here, the connection is successful
-      setTestResult(`✅ Connection successful! Found ${result.count} top-level folders in bucket "${config.bucketName}"`);
-      
-      // Wait a moment to show the success message, then proceed
-      setTimeout(async () => {
-        try {
-          await setConfig(config);
-        } catch (error) {
-          console.error('Failed to save config:', error);
-          setError('Failed to save configuration. Please try again.');
-        }
-      }, 1500);
-          } catch (err) {
-        console.error('S3 Connection Error:', err);
-        console.error('Error details:', {
-          name: err instanceof Error ? err.name : 'Unknown',
-          message: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : undefined,
-          config: {
-            bucketName: formData.bucketName,
-            region: formData.region,
-            hasCredentials: !!(formData.accessKeyId && formData.secretAccessKey),
-            hasRoleArn: !!formData.roleArn
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        console.log('Triggering Google Sign-In prompt...');
+        window.google.accounts.id.prompt((notification: any) => {
+          console.log('Prompt notification:', notification);
+          setIsLoading(false);
+          
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            console.log('Prompt was not displayed or skipped');
+            renderGoogleButton();
           }
         });
-        
-        let errorMessage = 'Failed to connect to S3';
-        
-        if (err instanceof Error) {
-          const errorMsg = err.message.toLowerCase();
-          const errorName = err.name.toLowerCase();
-          
-          if (errorMsg.includes('failed to fetch') || errorMsg.includes('fetch')) {
-            errorMessage = '🚫 CORS Error: Browser blocked the request to AWS S3. This is common when running locally. Try using a proxy server or deploy to a proper domain.';
-          } else if (errorMsg.includes('invalidaccesskeyid') || errorName.includes('invalidaccesskeyid')) {
-            errorMessage = 'Invalid Access Key ID. Please check your credentials.';
-          } else if (errorMsg.includes('signaturedoesnotmatch') || errorName.includes('signaturedoesnotmatch')) {
-            errorMessage = 'Invalid Secret Access Key. Please check your credentials.';
-          } else if (errorMsg.includes('tokenrefreshrequired') || errorName.includes('tokenrefreshrequired')) {
-            errorMessage = 'Session token has expired. Please provide a new token.';
-          } else if (errorMsg.includes('accessdenied') || errorName.includes('accessdenied')) {
-            errorMessage = 'Access denied. Please check your permissions for this S3 bucket and IAM role.';
-          } else if (errorMsg.includes('nosuchbucket') || errorName.includes('nosuchbucket')) {
-            errorMessage = 'The specified bucket does not exist or you do not have access to it.';
-          } else if (errorMsg.includes('networkingerror') || errorMsg.includes('enotfound') || errorMsg.includes('network')) {
-            errorMessage = 'Network error. Please check your internet connection and AWS region.';
-          } else if (errorMsg.includes('cors') || errorMsg.includes('cross-origin')) {
-            errorMessage = 'CORS error. This might be a browser security restriction when running locally.';
-          } else if (errorMsg.includes('credentialsnotfound') || errorMsg.includes('unable to load credentials')) {
-            errorMessage = 'No AWS credentials found. Please provide Access Key ID and Secret Access Key.';
-          } else if (errorMsg.includes('assumerole') || errorMsg.includes('role')) {
-            errorMessage = 'Failed to assume IAM role. Please check your role ARN and permissions.';
-          } else {
-            errorMessage = `Connection failed: ${err.message}`;
-          }
+      } else {
+        setIsLoading(false);
+        setError('Google Sign-In is not available. Please refresh the page and try again.');
+        console.error('Google services not available');
+      }
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Sign-in trigger error:', error);
+      setError('Failed to start Google Sign-In. Please try again.');
         }
-        
-        setError(errorMessage);
+  };
+
+  const renderGoogleButton = () => {
+    const buttonContainer = document.getElementById('google-signin-button');
+    if (buttonContainer && window.google) {
+      buttonContainer.innerHTML = '';
+      
+      window.google.accounts.id.renderButton(
+        buttonContainer,
+        {
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          width: 250,
+        }
+      );
+    }
+  };
+
+  const handleSignOut = () => {
+    setUser(null);
+    setError(null);
+  };
+
+  const handleContinue = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Set a minimal server-managed configuration
+      // The actual AWS operations are handled by the backend
+      await setConfig({
+        bucketName: 'server-managed', // Backend will use actual bucket from env
+        region: 'server-managed', // Backend will use actual region from env
+      });
+      
+      console.log('Successfully navigated to main application');
+    } catch (error) {
+      console.error('Failed to navigate to main application:', error);
+      setError(`Failed to launch file manager: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleTestLogin = () => {
+    // Test user for local development
+    const testUser: GoogleUser = {
+      id: 'test-user-123',
+      name: 'Test User',
+      email: 'test@example.com',
+      picture: 'https://via.placeholder.com/150'
+    };
+    setUser(testUser);
   };
 
   return (
@@ -185,32 +229,11 @@ const S3ConfigSetup: React.FC = () => {
         sx={{
           background: 'linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%)',
           borderBottom: '1px solid #334155',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-          position: 'relative',
-          overflow: 'hidden',
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(168, 85, 247, 0.1) 100%)',
-            pointerEvents: 'none',
-          },
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: 'linear-gradient(90deg, #6366f1, #8b5cf6, #a855f7, #ec4899)',
-          },
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
         }}
       >
         <Container maxWidth="xl">
-          <Box sx={{ py: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
+          <Box sx={{ py: 2.5, display: 'flex', alignItems: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
               <Box
                 sx={{
@@ -221,19 +244,10 @@ const S3ConfigSetup: React.FC = () => {
                   height: 48,
                   borderRadius: 3,
                   background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
-                  boxShadow: '0 6px 20px rgba(99, 102, 241, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1)',
-                  position: 'relative',
-                  '&::before': {
-                    content: '""',
-                    position: 'absolute',
-                    inset: 2,
-                    borderRadius: 2,
-                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%)',
-                    pointerEvents: 'none',
-                  },
+                  boxShadow: '0 6px 20px rgba(99, 102, 241, 0.4)',
                 }}
               >
-                <CloudUpload sx={{ fontSize: 28, color: 'white', position: 'relative', zIndex: 1 }} />
+                <CloudUpload sx={{ fontSize: 28, color: 'white' }} />
               </Box>
               <Box>
                 <Typography 
@@ -246,57 +260,19 @@ const S3ConfigSetup: React.FC = () => {
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     fontSize: { xs: '1.5rem', md: '1.75rem' },
-                    mb: 0.5,
-                    letterSpacing: '-0.025em',
-                    lineHeight: 1.2,
                   }}
                 >
                   AWS S3 File Manager
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Box
-                    sx={{
-                      px: 2,
-                      py: 0.5,
-                      borderRadius: 1.5,
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      backdropFilter: 'blur(10px)',
-                    }}
-                  >
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        color: '#e2e8f0',
-                        fontWeight: 600,
-                        fontSize: '0.75rem',
-                      }}
-                    >
-                      Configuration Setup
-                    </Typography>
-                  </Box>
-                  <Box
-                    sx={{
-                      px: 2,
-                      py: 0.5,
-                      borderRadius: 1.5,
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      backdropFilter: 'blur(10px)',
-                    }}
-                  >
                     <Typography 
                       variant="body2" 
                       sx={{ 
                         color: '#cbd5e1',
                         fontWeight: 500,
-                        fontSize: '0.75rem',
                       }}
                     >
-                      Enterprise-grade S3 Management
+                  with JSON Schema Validation
                     </Typography>
-                  </Box>
-                </Box>
               </Box>
             </Box>
           </Box>
@@ -304,341 +280,155 @@ const S3ConfigSetup: React.FC = () => {
       </Box>
 
              {/* Main Content */}
-       <Box sx={{ flex: 1, py: 6 }}>
-         <Container maxWidth="xl">
+      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
+        <Container maxWidth="sm">
+          {user ? (
+            // Success state
            <Box
              sx={{
-               background: 'linear-gradient(135deg, #ffffff 0%, #fefefe 100%)',
+                background: 'white',
                borderRadius: 4,
                border: '1px solid #e2e8f0',
-               boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-               overflow: 'hidden',
-               position: 'relative',
-               '&::before': {
-                 content: '""',
-                 position: 'absolute',
-                 top: 0,
-                 left: 0,
-                 right: 0,
-                 height: '4px',
-                 background: 'linear-gradient(90deg, #6366f1, #8b5cf6, #a855f7)',
-               },
-             }}
-           >
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                p: 6,
+                textAlign: 'center',
+              }}
+            >
+              <CheckCircle sx={{ fontSize: 64, color: 'success.main', mb: 3 }} />
+              
+              <Typography variant="h4" sx={{ fontWeight: 700, mb: 2, color: '#0f172a' }}>
+                Welcome, {user.name}!
+              </Typography>
+              
+              <Typography variant="body1" sx={{ color: '#64748b', mb: 4 }}>
+                You're now authenticated and ready to manage your S3 files.
+              </Typography>
+
             {error && (
-              <Alert severity="error" sx={{ m: 3, borderRadius: 2 }}>
+                <Alert severity="error" sx={{ mb: 4, textAlign: 'left' }}>
                 {error}
               </Alert>
             )}
 
-            {testResult && (
-              <Alert severity="success" sx={{ m: 3, borderRadius: 2 }}>
-                {testResult}
-              </Alert>
-            )}
+              <Avatar
+                src={user.picture}
+                alt={user.name}
+                      sx={{
+                  width: 80, 
+                  height: 80,
+                  mx: 'auto',
+                  mb: 3,
+                  border: '3px solid #e2e8f0',
+                }}
+              />
 
-                        <Box sx={{ p: { xs: 5, md: 8 }, pt: { xs: 6, md: 9 } }}>
-              <form onSubmit={handleSubmit}>
-                <Stack spacing={5}>
-                {/* Basic Configuration Section */}
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
+              <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                {user.email}
+                    </Typography>
+
+              <Stack spacing={2} direction="row" sx={{ justifyContent: 'center' }}>
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={handleContinue}
+                  disabled={isLoading}
+                      sx={{ 
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                          fontWeight: 600,
+                    px: 4,
+                    py: 1.5,
+                    borderRadius: 2,
+                      }}
+                >
+                  {isLoading ? 'Launching...' : 'Launch File Manager'}
+                </Button>
+                
+                <Button
+                      variant="outlined"
+                  onClick={handleSignOut}
+                  sx={{ px: 4, py: 1.5, borderRadius: 2 }}
+                >
+                  Sign Out
+                </Button>
+              </Stack>
+                  </Box>
+          ) : (
+            // Sign-in state
                     <Box
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 52,
-                        height: 52,
-                        borderRadius: 3,
-                        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                        boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)',
-                        mr: 4,
+                background: 'white',
+                borderRadius: 4,
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                p: 8,
+                textAlign: 'center',
                       }}
                     >
-                      <Settings sx={{ color: 'white', fontSize: 26 }} />
-                    </Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: '#0f172a', fontSize: { xs: '1.6rem', md: '2rem' } }}>
-                      Basic Configuration
+              <Google sx={{ fontSize: 64, color: '#4285f4', mb: 3 }} />
+              
+              <Typography variant="h4" sx={{ fontWeight: 700, mb: 2, color: '#0f172a' }}>
+                Sign In Required
                     </Typography>
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', gap: 4, flexDirection: { xs: 'column', md: 'row' } }}>
-                    <TextField
-                      fullWidth
-                      label="S3 Bucket Name"
-                      value={formData.bucketName}
-                      onChange={handleInputChange('bucketName')}
-                      required
-                      placeholder="my-s3-bucket"
-                      variant="outlined"
-                      sx={{ 
-                        '& .MuiOutlinedInput-root': { 
-                          borderRadius: 3,
-                          backgroundColor: '#fafafa',
-                          '&:hover': {
-                            backgroundColor: '#f5f5f5',
-                          },
-                          '&.Mui-focused': {
-                            backgroundColor: 'white',
-                          },
-                        },
-                        '& .MuiInputLabel-root': {
-                          fontWeight: 600,
-                        },
-                      }}
-                    />
-                    <TextField
-                      fullWidth
-                      label="AWS Region"
-                      value={formData.region}
-                      onChange={handleInputChange('region')}
-                      required
-                      placeholder="us-east-1"
-                      variant="outlined"
-                      sx={{ 
-                        '& .MuiOutlinedInput-root': { 
-                          borderRadius: 3,
-                          backgroundColor: '#fafafa',
-                          '&:hover': {
-                            backgroundColor: '#f5f5f5',
-                          },
-                          '&.Mui-focused': {
-                            backgroundColor: 'white',
-                          },
-                        },
-                        '& .MuiInputLabel-root': {
-                          fontWeight: 600,
-                        },
-                      }}
-                    />
-                  </Box>
-                                  </Box>
+              
+              <Typography variant="body1" sx={{ color: '#64748b', mb: 6, maxWidth: 400, mx: 'auto' }}>
+                Please sign in with your Google account to access the AWS S3 File Manager.
+                    </Typography>
 
-                <Divider sx={{ borderColor: '#e2e8f0', my: 2 }} />
-
-                {/* AWS Credentials Section */}
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 52,
-                        height: 52,
-                        borderRadius: 3,
-                        background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-                        boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
-                        mr: 4,
-                      }}
-                    >
-                      <Security sx={{ color: 'white', fontSize: 26 }} />
-                    </Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: '#0f172a', fontSize: { xs: '1.6rem', md: '2rem' } }}>
-                      AWS Credentials (Required)
-                    </Typography>
-                  </Box>
-                  
-                  <Alert severity="warning" sx={{ mb: 3, borderRadius: 2 }}>
-                    <Typography variant="body2">
-                      <strong>🔐 Security Notice:</strong> Your AWS access credentials are required for secure authentication. 
-                      All credentials are processed securely and never stored permanently.
-                    </Typography>
+              {error && (
+                <Alert severity="error" sx={{ mb: 4, textAlign: 'left' }}>
+                  {error}
                   </Alert>
+              )}
 
-                  <Box sx={{ display: 'flex', gap: 4, flexDirection: { xs: 'column', md: 'row' } }}>
-                    <TextField
-                      fullWidth
-                      label="Access Key ID"
-                      type={showSecrets.accessKey ? 'text' : 'password'}
-                      value={formData.accessKeyId}
-                      onChange={handleInputChange('accessKeyId')}
-                      required
-                      placeholder="AKIAIOSFODNN7EXAMPLE"
-                      variant="outlined"
-                      sx={{ 
-                        '& .MuiOutlinedInput-root': { 
-                          borderRadius: 3,
-                          backgroundColor: '#fafafa',
-                          '&:hover': {
-                            backgroundColor: '#f5f5f5',
-                          },
-                          '&.Mui-focused': {
-                            backgroundColor: 'white',
-                          },
-                        },
-                        '& .MuiInputLabel-root': {
-                          fontWeight: 600,
-                        },
-                      }}
-                      InputProps={{
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton
-                              onClick={() => toggleShowSecret('accessKey')}
-                              edge="end"
-                            >
-                              {showSecrets.accessKey ? <VisibilityOff /> : <Visibility />}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
-                    <TextField
-                      fullWidth
-                      label="Secret Access Key"
-                      type={showSecrets.secretKey ? 'text' : 'password'}
-                      value={formData.secretAccessKey}
-                      onChange={handleInputChange('secretAccessKey')}
-                      required
-                      placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-                      variant="outlined"
-                      sx={{ 
-                        '& .MuiOutlinedInput-root': { 
-                          borderRadius: 3,
-                          backgroundColor: '#fafafa',
-                          '&:hover': {
-                            backgroundColor: '#f5f5f5',
-                          },
-                          '&.Mui-focused': {
-                            backgroundColor: 'white',
-                          },
-                        },
-                        '& .MuiInputLabel-root': {
-                          fontWeight: 600,
-                        },
-                      }}
-                      InputProps={{
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton
-                              onClick={() => toggleShowSecret('secretKey')}
-                              edge="end"
-                            >
-                              {showSecrets.secretKey ? <VisibilityOff /> : <Visibility />}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
-                  </Box>
-                </Box>
-
-                <Divider sx={{ borderColor: '#e2e8f0', my: 2 }} />
-
-                {/* IAM Role Section */}
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 52,
-                        height: 52,
-                        borderRadius: 3,
-                        background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                        boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)',
-                        mr: 4,
-                      }}
-                    >
-                      <AccountTree sx={{ color: 'white', fontSize: 26 }} />
-                    </Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: '#0f172a', fontSize: { xs: '1.6rem', md: '2rem' } }}>
-                      IAM Role Configuration (Required)
-                    </Typography>
-                  </Box>
-                  
-                  <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
-                    <Typography variant="body2">
-                      <strong>🎯 Role Assumption:</strong> The application will assume this IAM role using your credentials 
-                      to access S3 resources securely. This role must have appropriate S3 permissions.
-                    </Typography>
-                  </Alert>
-
-                  <TextField
-                    fullWidth
-                    label="IAM Role ARN"
-                    value={formData.roleArn}
-                    onChange={handleInputChange('roleArn')}
-                    required
-                    placeholder="arn:aws:iam::123456789012:role/YourRoleName"
-                    variant="outlined"
-                    sx={{ 
-                      '& .MuiOutlinedInput-root': { 
-                        borderRadius: 3,
-                        backgroundColor: '#fafafa',
-                        '&:hover': {
-                          backgroundColor: '#f5f5f5',
-                        },
-                        '&.Mui-focused': {
-                          backgroundColor: 'white',
-                        },
-                      },
-                      '& .MuiInputLabel-root': {
-                        fontWeight: 600,
-                      },
-                    }}
-                    helperText="This role will be assumed using your credentials to access S3 resources"
-                  />
-                </Box>
-
-                {/* Submit Button */}
-                <Box sx={{ pt: 3 }}>
                   <Button
-                    type="submit"
-                    fullWidth
                     variant="contained"
-                    size="medium"
+                size="large"
+                startIcon={<Google />}
+                onClick={handleGoogleSignIn}
                     disabled={isLoading}
                     sx={{ 
+                  background: 'linear-gradient(135deg, #4285f4 0%, #3367d6 100%)',
+                  color: 'white',
+                  fontWeight: 600,
                       py: 2,
-                      borderRadius: 3,
+                  px: 6,
+                  borderRadius: 2,
                       fontSize: '1rem',
-                      fontWeight: 600,
-                      background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
                       textTransform: 'none',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      '&::before': {
-                        content: '""',
-                        position: 'absolute',
-                        top: 0,
-                        left: '-100%',
-                        width: '100%',
-                        height: '100%',
-                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
-                        transition: 'left 0.5s',
-                      },
+                  mb: 3,
                       '&:hover': {
-                        background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
-                        boxShadow: '0 6px 20px rgba(99, 102, 241, 0.4)',
-                        transform: 'translateY(-1px)',
-                        '&::before': {
-                          left: '100%',
-                        },
-                      },
-                      '&:disabled': {
-                        background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
-                        boxShadow: 'none',
-                        transform: 'none',
-                      },
-                      transition: 'all 0.3s ease',
+                    background: 'linear-gradient(135deg, #3367d6 0%, #1d4ed8 100%)',
+                  },
                     }}
                   >
-                    {isLoading ? 'Connecting to AWS...' : 'Connect to S3'}
+                {isLoading ? 'Signing in...' : 'Sign in with Google'}
                   </Button>
+
+              {/* Fallback Google Button */}
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+                <div id="google-signin-button" style={{ minHeight: '44px' }} />
                 </Box>
-              </Stack>
-            </form>
+
+              {/* Test Mode for Development */}
+              {isLocalDevelopment && (
+                <>
+                  <Divider sx={{ my: 3 }} />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={handleTestLogin}
+                    sx={{ fontSize: '0.875rem' }}
+                  >
+                    Test Mode (Development Only)
+                  </Button>
+                </>
+              )}
             </Box>
-          </Box>
+          )}
         </Container>
       </Box>
     </Box>
   );
 };
 
-export default S3ConfigSetup; 
+export default GoogleAuthSetup; 
