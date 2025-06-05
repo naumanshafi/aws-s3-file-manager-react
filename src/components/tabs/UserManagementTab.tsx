@@ -38,6 +38,7 @@ import {
   Email,
   Save,
   Cancel,
+  CloudOff,
 } from '@mui/icons-material';
 import { authService } from '../../services/authService';
 
@@ -70,6 +71,9 @@ const UserManagementTab: React.FC = () => {
   const [newUserRole, setNewUserRole] = useState<'admin' | 'user'>('user');
   const [editUserRole, setEditUserRole] = useState<'admin' | 'user'>('user');
 
+  // Check if running in local development
+  const isLocalDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
   // Helper function to make authenticated requests
   const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
     const authHeaders = authService.getAuthHeaders();
@@ -86,11 +90,22 @@ const UserManagementTab: React.FC = () => {
 
   // Fetch authorized users
   const fetchUsers = async () => {
+    // Skip API calls in local development
+    if (isLocalDevelopment) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
+      if (!authService.isAuthenticated()) {
+        throw new Error('User not authenticated. Please sign in again.');
+      }
+      
       const response = await makeAuthenticatedRequest('/api/users/authorized');
+      
       if (!response.ok) {
         throw new Error(`Failed to fetch users: ${response.statusText}`);
       }
@@ -107,6 +122,11 @@ const UserManagementTab: React.FC = () => {
 
   // Add new user
   const handleAddUser = async () => {
+    if (isLocalDevelopment) {
+      setError('User management is not available in local development mode.');
+      return;
+    }
+
     if (!newUserEmail.trim()) {
       setError('Email is required');
       return;
@@ -147,6 +167,11 @@ const UserManagementTab: React.FC = () => {
 
   // Edit user role
   const handleEditUser = async () => {
+    if (isLocalDevelopment) {
+      setError('User management is not available in local development mode.');
+      return;
+    }
+
     if (!editingUser || !currentUser || currentUser.role !== 'admin') {
       setError('Only administrators can edit users');
       return;
@@ -180,6 +205,11 @@ const UserManagementTab: React.FC = () => {
 
   // Delete user
   const handleDeleteUser = async (email: string) => {
+    if (isLocalDevelopment) {
+      setError('User management is not available in local development mode.');
+      return;
+    }
+
     if (!currentUser || currentUser.role !== 'admin') {
       setError('Only administrators can delete users');
       return;
@@ -225,7 +255,80 @@ const UserManagementTab: React.FC = () => {
     fetchUsers();
   }, []);
 
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = authService.isAdmin();
+
+  // Show local development message
+  if (isLocalDevelopment) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {/* Header */}
+        <Box
+          sx={{
+            background: 'linear-gradient(135deg, #ffffff 0%, #fefefe 100%)',
+            borderRadius: 3,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+            p: 4,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  borderRadius: 2,
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)',
+                }}
+              >
+                <SupervisorAccount sx={{ fontSize: 20, color: 'white' }} />
+              </Box>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a' }}>
+                User Management
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+
+        {/* Local Development Message */}
+        <Box
+          sx={{
+            background: 'linear-gradient(135deg, #ffffff 0%, #fefefe 100%)',
+            borderRadius: 3,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+            p: 6,
+            textAlign: 'center',
+          }}
+        >
+          <CloudOff sx={{ fontSize: 64, color: '#6b7280', mb: 3 }} />
+          
+          <Typography variant="h5" sx={{ fontWeight: 700, color: '#0f172a', mb: 2 }}>
+            Backend Required
+          </Typography>
+          
+          <Typography variant="body1" sx={{ color: '#64748b', mb: 4, maxWidth: 500, mx: 'auto' }}>
+            User Management features require a backend server to be running. This functionality is only available in production mode with proper API endpoints.
+          </Typography>
+
+          <Alert severity="info" sx={{ textAlign: 'left', maxWidth: 600, mx: 'auto' }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+              To use User Management:
+            </Typography>
+            <Typography variant="body2" component="div">
+              • Deploy the application to production<br/>
+              • Ensure the backend server is running<br/>
+              • Access the application via the production URL
+            </Typography>
+          </Alert>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

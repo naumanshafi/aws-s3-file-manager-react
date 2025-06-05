@@ -1,8 +1,14 @@
 {
   "users": [
     {
-      "email": "noman.shafi@turing.com",
+      "email": "noman.s@turing.com",
       "role": "admin",
+      "addedAt": "2024-12-05T08:45:00.000Z",
+      "addedBy": "system"
+    },
+    {
+      "email": "admin@turing.com",
+      "role": "Test User",
       "addedAt": "2024-12-05T08:45:00.000Z",
       "addedBy": "system"
     }
