@@ -15,6 +15,104 @@ const path = require('path');
 const app = express();
 const PORT = process.env.BACKEND_PORT || process.env.PORT || 5001;
 
+// Path for authorized users JSON file
+const AUTHORIZED_USERS_FILE = path.join(__dirname, 'data', 'authorized-users.json');
+
+// Ensure data directory exists
+const dataDir = path.dirname(AUTHORIZED_USERS_FILE);
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// Initialize authorized users file if it doesn't exist
+function initializeAuthorizedUsersFile() {
+  if (!fs.existsSync(AUTHORIZED_USERS_FILE)) {
+    const defaultUsers = {
+      users: [
+        {
+          email: 'admin@turing.com',
+          role: 'admin',
+          addedAt: new Date().toISOString(),
+          addedBy: 'system'
+        }
+      ]
+    };
+    fs.writeFileSync(AUTHORIZED_USERS_FILE, JSON.stringify(defaultUsers, null, 2));
+    console.log('✅ Initialized authorized users file with default admin');
+  }
+}
+
+// Load authorized users from JSON file
+function loadAuthorizedUsers() {
+  try {
+    if (fs.existsSync(AUTHORIZED_USERS_FILE)) {
+      const data = fs.readFileSync(AUTHORIZED_USERS_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+    return { users: [] };
+  } catch (error) {
+    console.error('❌ Error loading authorized users:', error);
+    return { users: [] };
+  }
+}
+
+// Save authorized users to JSON file
+function saveAuthorizedUsers(usersData) {
+  try {
+    fs.writeFileSync(AUTHORIZED_USERS_FILE, JSON.stringify(usersData, null, 2));
+    return true;
+  } catch (error) {
+    console.error('❌ Error saving authorized users:', error);
+    return false;
+  }
+}
+
+// Middleware to check if user is authorized
+function checkUserAuthorization(req, res, next) {
+  // For development/testing, allow localhost access
+  if (process.env.NODE_ENV !== 'production') {
+    req.user = { email: 'admin@turing.com', role: 'admin' };
+    return next();
+  }
+
+  // In production, check the user's email from Google OAuth
+  const userEmail = req.headers['x-user-email']; // This should be set by Google OAuth
+  
+  if (!userEmail) {
+    return res.status(401).json({ 
+      error: 'UNAUTHORIZED', 
+      message: 'User email not found. Please ensure you are properly authenticated.' 
+    });
+  }
+
+  const usersData = loadAuthorizedUsers();
+  const authorizedUser = usersData.users.find(user => user.email.toLowerCase() === userEmail.toLowerCase());
+  
+  if (!authorizedUser) {
+    return res.status(403).json({ 
+      error: 'ACCESS_DENIED', 
+      message: 'Your email is not authorized to access this application. Please contact an administrator.' 
+    });
+  }
+
+  req.user = authorizedUser;
+  next();
+}
+
+// Middleware to check if user is admin
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ 
+      error: 'ADMIN_REQUIRED', 
+      message: 'Administrator privileges required for this operation.' 
+    });
+  }
+  next();
+}
+
+// Initialize authorized users file on startup
+initializeAuthorizedUsersFile();
+
 // Log environment and port information
 console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
 console.log('🔌 Port source:', process.env.PORT ? 'Environment variable' : 'Default fallback');
@@ -567,6 +665,203 @@ app.post('/api/schema/validate', upload.fields([
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'S3 API server is running' });
 });
+
+// ============================================
+// USER MANAGEMENT API ENDPOINTS
+// ============================================
+
+// Get authorized users list
+app.get('/api/users/authorized', checkUserAuthorization, (req, res) => {
+  try {
+    const usersData = loadAuthorizedUsers();
+    
+    res.json({
+      users: usersData.users.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt)),
+      currentUser: {
+        email: req.user.email,
+        role: req.user.role
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching authorized users:', error);
+    res.status(500).json({ 
+      error: 'FETCH_USERS_FAILED', 
+      message: 'Failed to fetch authorized users list.' 
+    });
+  }
+});
+
+// Add new authorized user
+app.post('/api/users/authorized', checkUserAuthorization, requireAdmin, (req, res) => {
+  try {
+    const { email, role } = req.body;
+    
+    if (!email || !email.trim()) {
+      return res.status(400).json({ 
+        error: 'INVALID_EMAIL', 
+        message: 'Email address is required.' 
+      });
+    }
+    
+    if (!role || !['admin', 'user'].includes(role)) {
+      return res.status(400).json({ 
+        error: 'INVALID_ROLE', 
+        message: 'Role must be either "admin" or "user".' 
+      });
+    }
+    
+    const normalizedEmail = email.trim().toLowerCase();
+    const usersData = loadAuthorizedUsers();
+    
+    // Check if user already exists
+    const existingUser = usersData.users.find(user => user.email.toLowerCase() === normalizedEmail);
+    if (existingUser) {
+      return res.status(409).json({ 
+        error: 'USER_EXISTS', 
+        message: 'User with this email already exists.' 
+      });
+    }
+    
+    // Add new user
+    const newUser = {
+      email: normalizedEmail,
+      role,
+      addedAt: new Date().toISOString(),
+      addedBy: req.user.email
+    };
+    
+    usersData.users.push(newUser);
+    
+    if (!saveAuthorizedUsers(usersData)) {
+      return res.status(500).json({ 
+        error: 'SAVE_FAILED', 
+        message: 'Failed to save user to authorized users list.' 
+      });
+    }
+    
+    console.log(`✅ User added: ${normalizedEmail} (${role}) by ${req.user.email}`);
+    res.json({ 
+      success: true, 
+      message: 'User added successfully.',
+      user: newUser
+    });
+    
+  } catch (error) {
+    console.error('❌ Error adding user:', error);
+    res.status(500).json({ 
+      error: 'ADD_USER_FAILED', 
+      message: 'Failed to add user to authorized users list.' 
+    });
+  }
+});
+
+// Update user role
+app.put('/api/users/authorized/:email', checkUserAuthorization, requireAdmin, (req, res) => {
+  try {
+    const targetEmail = decodeURIComponent(req.params.email).toLowerCase();
+    const { role } = req.body;
+    
+    if (!role || !['admin', 'user'].includes(role)) {
+      return res.status(400).json({ 
+        error: 'INVALID_ROLE', 
+        message: 'Role must be either "admin" or "user".' 
+      });
+    }
+    
+    const usersData = loadAuthorizedUsers();
+    const userIndex = usersData.users.findIndex(user => user.email.toLowerCase() === targetEmail);
+    
+    if (userIndex === -1) {
+      return res.status(404).json({ 
+        error: 'USER_NOT_FOUND', 
+        message: 'User not found in authorized users list.' 
+      });
+    }
+    
+    // Prevent admins from removing their own admin privileges
+    if (targetEmail === req.user.email.toLowerCase() && role !== 'admin') {
+      return res.status(400).json({ 
+        error: 'CANNOT_DEMOTE_SELF', 
+        message: 'You cannot remove your own administrator privileges.' 
+      });
+    }
+    
+    usersData.users[userIndex].role = role;
+    
+    if (!saveAuthorizedUsers(usersData)) {
+      return res.status(500).json({ 
+        error: 'SAVE_FAILED', 
+        message: 'Failed to update user role.' 
+      });
+    }
+    
+    console.log(`✅ User role updated: ${targetEmail} -> ${role} by ${req.user.email}`);
+    res.json({ 
+      success: true, 
+      message: 'User role updated successfully.',
+      user: usersData.users[userIndex]
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating user:', error);
+    res.status(500).json({ 
+      error: 'UPDATE_USER_FAILED', 
+      message: 'Failed to update user role.' 
+    });
+  }
+});
+
+// Delete authorized user
+app.delete('/api/users/authorized/:email', checkUserAuthorization, requireAdmin, (req, res) => {
+  try {
+    const targetEmail = decodeURIComponent(req.params.email).toLowerCase();
+    
+    // Prevent admins from deleting their own account
+    if (targetEmail === req.user.email.toLowerCase()) {
+      return res.status(400).json({ 
+        error: 'CANNOT_DELETE_SELF', 
+        message: 'You cannot delete your own account.' 
+      });
+    }
+    
+    const usersData = loadAuthorizedUsers();
+    const userIndex = usersData.users.findIndex(user => user.email.toLowerCase() === targetEmail);
+    
+    if (userIndex === -1) {
+      return res.status(404).json({ 
+        error: 'USER_NOT_FOUND', 
+        message: 'User not found in authorized users list.' 
+      });
+    }
+    
+    const deletedUser = usersData.users.splice(userIndex, 1)[0];
+    
+    if (!saveAuthorizedUsers(usersData)) {
+      return res.status(500).json({ 
+        error: 'SAVE_FAILED', 
+        message: 'Failed to delete user from authorized users list.' 
+      });
+    }
+    
+    console.log(`✅ User deleted: ${targetEmail} by ${req.user.email}`);
+    res.json({ 
+      success: true, 
+      message: 'User deleted successfully.',
+      deletedUser: deletedUser
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting user:', error);
+    res.status(500).json({ 
+      error: 'DELETE_USER_FAILED', 
+      message: 'Failed to delete user from authorized users list.' 
+    });
+  }
+});
+
+// ============================================
+// EXISTING S3 API ENDPOINTS
+// ============================================
 
 // Catch-all handler: send back React's index.html file for any non-API routes
 app.get('*', (req, res) => {

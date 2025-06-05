@@ -18,6 +18,7 @@ import {
   CheckCircle,
 } from '@mui/icons-material';
 import { useS3Config } from '../contexts/S3ConfigContext';
+import { authService } from '../services/authService';
 
 // Declare Google Identity Services types
 declare global {
@@ -122,6 +123,12 @@ const GoogleAuthSetup: React.FC = () => {
         picture: payload.picture,
       };
 
+      // Store user authentication information
+      authService.setUser({
+        email: userData.email,
+        name: userData.name
+      });
+
       setUser(userData);
       console.log('Google Auth Success:', userData);
       
@@ -179,6 +186,8 @@ const GoogleAuthSetup: React.FC = () => {
   };
 
   const handleSignOut = () => {
+    // Clear authentication
+    authService.clearAuth();
     setUser(null);
     setError(null);
   };
@@ -209,9 +218,16 @@ const GoogleAuthSetup: React.FC = () => {
     const testUser: GoogleUser = {
       id: 'test-user-123',
       name: 'Test User',
-      email: 'test@example.com',
+      email: 'admin@turing.com', // Use admin email for testing
       picture: 'https://via.placeholder.com/150'
     };
+    
+    // Store test user authentication
+    authService.setUser({
+      email: testUser.email,
+      name: testUser.name
+    });
+    
     setUser(testUser);
   };
 

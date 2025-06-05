@@ -17,6 +17,7 @@ import {
   Delete,
   Logout,
   VerifiedUser,
+  SupervisorAccount,
 } from '@mui/icons-material';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useS3Config } from '../contexts/S3ConfigContext';
@@ -25,6 +26,7 @@ import DownloadTab from './tabs/DownloadTab';
 import BrowseTab from './tabs/BrowseTab';
 import DeleteTab from './tabs/DeleteTab';
 import SchemaValidationTab from './tabs/SchemaValidationTab';
+import UserManagementTab from './tabs/UserManagementTab';
 
 const S3Dashboard: React.FC = () => {
   const { config, clearConfig } = useS3Config();
@@ -67,6 +69,12 @@ const S3Dashboard: React.FC = () => {
       label: 'Schema Validation',
       icon: <VerifiedUser />,
       component: <SchemaValidationTab />,
+    },
+    {
+      path: '/user-management',
+      label: 'User Management',
+      icon: <SupervisorAccount />,
+      component: <UserManagementTab />,
     },
   ];
 
@@ -320,6 +328,7 @@ const S3Dashboard: React.FC = () => {
               <Route path="/browse" element={<BrowseTab />} />
               <Route path="/delete" element={<DeleteTab />} />
               <Route path="/schema-validation" element={<SchemaValidationTab />} />
+              <Route path="/user-management" element={<UserManagementTab />} />
               <Route path="/" element={<UploadTab />} />
             </Routes>
           </Box>
