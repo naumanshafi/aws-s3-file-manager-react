@@ -57,7 +57,7 @@ pip install jsonschema
 For local development, create a `.env` file:
 ```bash
 # Google OAuth
-REACT_APP_GOOGLE_CLIENT_ID=549557403268-707u7eagk8bbknhdg95p9kaukak74voq.apps.googleusercontent.com
+REACT_APP_GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID
 REACT_APP_API_URL=http://localhost:5001/api
 PORT=3000
 BACKEND_PORT=5001
