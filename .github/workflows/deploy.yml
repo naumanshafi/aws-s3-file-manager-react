@@ -10,43 +10,43 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     
-    steps:
-    - uses: actions/checkout@v3
+    # steps:
+    # - uses: actions/checkout@v3
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+    # - name: Setup Node.js
+    #   uses: actions/setup-node@v3
+    #   with:
+    #     node-version: '20'
     
-    - name: Install dependencies
-      run: npm install
+    # - name: Install dependencies
+    #   run: npm install
     
-    - name: Build application
-      run: |
-        CI=false npm run build
+    # - name: Build application
+    #   run: |
+    #     CI=false npm run build
     
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v0.1.7
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.PRIVATE_KEY }}
-        port: ${{ secrets.PORT }}
-        script: |
-          cd ~/aws-s3-file-manager-react
-          git pull origin main
-          npm install
-          CI=false npm run build
-          pm2 restart s3-file-manager || pm2 start ecosystem.config.js
-          pm2 save
+    # - name: Deploy to server
+    #   uses: appleboy/ssh-action@v0.1.7
+    #   with:
+    #     host: ${{ secrets.HOST }}
+    #     username: ${{ secrets.USERNAME }}
+    #     key: ${{ secrets.PRIVATE_KEY }}
+    #     port: ${{ secrets.PORT }}
+    #     script: |
+    #       cd ~/aws-s3-file-manager-react
+    #       git pull origin main
+    #       npm install
+    #       CI=false npm run build
+    #       pm2 restart s3-file-manager || pm2 start ecosystem.config.js
+    #       pm2 save
     
-    - name: Health Check
-      uses: appleboy/ssh-action@v0.1.7
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.PRIVATE_KEY }}
-        port: ${{ secrets.PORT }}
-        script: |
-          sleep 10
-          pm2 status s3-file-manager 
+    # - name: Health Check
+    #   uses: appleboy/ssh-action@v0.1.7
+    #   with:
+    #     host: ${{ secrets.HOST }}
+    #     username: ${{ secrets.USERNAME }}
+    #     key: ${{ secrets.PRIVATE_KEY }}
+    #     port: ${{ secrets.PORT }}
+    #     script: |
+    #       sleep 10
+    #       pm2 status s3-file-manager 
