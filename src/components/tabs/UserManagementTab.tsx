@@ -90,8 +90,24 @@ const UserManagementTab: React.FC = () => {
       setIsLoading(true);
       setError(null);
       
+      // Debug authentication
+      const userEmail = authService.getUserEmail();
+      const authHeaders = authService.getAuthHeaders();
+      console.log('🔍 Debug - User email:', userEmail);
+      console.log('🔍 Debug - Auth headers:', authHeaders);
+      console.log('🔍 Debug - Is authenticated:', authService.isAuthenticated());
+      
+      if (!authService.isAuthenticated()) {
+        throw new Error('User not authenticated. Please sign in again.');
+      }
+      
       const response = await makeAuthenticatedRequest('/api/users/authorized');
+      console.log('🔍 Debug - Response status:', response.status);
+      console.log('🔍 Debug - Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
+        const responseText = await response.text();
+        console.log('🔍 Debug - Response text:', responseText);
         throw new Error(`Failed to fetch users: ${response.statusText}`);
       }
       
@@ -99,6 +115,7 @@ const UserManagementTab: React.FC = () => {
       setUsers(data.users || []);
       setCurrentUser(data.currentUser || null);
     } catch (err) {
+      console.error('🔍 Debug - Fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch users');
     } finally {
       setIsLoading(false);
