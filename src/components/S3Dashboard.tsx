@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Container,
@@ -9,6 +9,13 @@ import {
   Tab,
   IconButton,
   Paper,
+  Menu,
+  MenuItem,
+  Avatar,
+  Chip,
+  Divider,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import {
   CloudUpload,
@@ -18,9 +25,14 @@ import {
   Logout,
   VerifiedUser,
   SupervisorAccount,
+  Person,
+  AdminPanelSettings,
+  AccountCircle,
+  ExpandMore,
 } from '@mui/icons-material';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useS3Config } from '../contexts/S3ConfigContext';
+import { authService } from '../services/authService';
 import UploadTab from './tabs/UploadTab';
 import DownloadTab from './tabs/DownloadTab';
 import BrowseTab from './tabs/BrowseTab';
@@ -32,11 +44,26 @@ const S3Dashboard: React.FC = () => {
   const { config, clearConfig } = useS3Config();
   const navigate = useNavigate();
   const location = useLocation();
+  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
+  
+  // Get current user info
+  const userInfo = authService.getUserInfo();
+  const isAdmin = authService.isAdmin();
 
   const handleLogout = () => {
+    // Clear auth and config
+    authService.clearAuth();
     clearConfig();
-    // Navigate to localhost:3000 (configuration page)
-    window.location.href = 'http://localhost:3000';
+    // Instead of navigating to localhost:3000, reload the page to go back to login
+    window.location.href = window.location.origin;
+  };
+
+  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setUserMenuAnchor(event.currentTarget);
+  };
+
+  const handleUserMenuClose = () => {
+    setUserMenuAnchor(null);
   };
 
   const tabConfig = [
@@ -45,43 +72,52 @@ const S3Dashboard: React.FC = () => {
       label: 'Upload',
       icon: <CloudUpload />,
       component: <UploadTab />,
+      visible: true,
     },
     {
       path: '/download',
       label: 'Download',
       icon: <CloudDownload />,
       component: <DownloadTab />,
+      visible: true,
     },
     {
       path: '/browse',
       label: 'Browse',
       icon: <FolderOpen />,
       component: <BrowseTab />,
+      visible: true,
     },
     {
       path: '/delete',
       label: 'Delete',
       icon: <Delete />,
       component: <DeleteTab />,
+      visible: true,
     },
     {
       path: '/schema-validation',
       label: 'Schema Validation',
       icon: <VerifiedUser />,
       component: <SchemaValidationTab />,
+      visible: true,
     },
     {
       path: '/user-management',
       label: 'User Management',
       icon: <SupervisorAccount />,
       component: <UserManagementTab />,
+      visible: isAdmin, // Only show to admin users
     },
   ];
+
+  // Filter visible tabs
+  const visibleTabs = tabConfig.filter(tab => tab.visible);
 
   // Get current tab value from pathname
   const getCurrentTab = () => {
     const currentPath = location.pathname;
-    const currentTab = tabConfig.find(tab => tab.path === currentPath);
+    const currentTab = visibleTabs.find(tab => tab.path === currentPath);
     return currentTab ? currentPath : '/upload'; // Default to upload
   };
 
@@ -89,12 +125,13 @@ const S3Dashboard: React.FC = () => {
     navigate(newValue);
   };
 
-  // Redirect to upload if on root path
+  // Redirect to upload if on root path or if accessing restricted tab
   React.useEffect(() => {
-    if (location.pathname === '/') {
+    const currentPath = location.pathname;
+    if (currentPath === '/' || (!visibleTabs.find(tab => tab.path === currentPath))) {
       navigate('/upload', { replace: true });
     }
-  }, [location.pathname, navigate]);
+  }, [location.pathname, navigate, visibleTabs]);
 
   return (
     <Box sx={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)' }}>
@@ -128,15 +165,24 @@ const S3Dashboard: React.FC = () => {
         }}
       >
         <Container maxWidth="xl">
-          <Box sx={{ py: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <Box sx={{ 
+            py: { xs: 1.5, md: 2.5 }, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            position: 'relative', 
+            zIndex: 1,
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: { xs: 2, sm: 0 }
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 3 } }}>
               <Box
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 48,
-                  height: 48,
+                  width: { xs: 40, md: 48 },
+                  height: { xs: 40, md: 48 },
                   borderRadius: 3,
                   background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
                   boxShadow: '0 6px 20px rgba(99, 102, 241, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1)',
@@ -151,7 +197,7 @@ const S3Dashboard: React.FC = () => {
                   },
                 }}
               >
-                <CloudUpload sx={{ fontSize: 28, color: 'white', position: 'relative', zIndex: 1 }} />
+                <CloudUpload sx={{ fontSize: { xs: 24, md: 28 }, color: 'white', position: 'relative', zIndex: 1 }} />
               </Box>
               <Box>
                 <Typography 
@@ -163,7 +209,7 @@ const S3Dashboard: React.FC = () => {
                     backgroundClip: 'text',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
-                    fontSize: { xs: '1.5rem', md: '1.75rem' },
+                    fontSize: { xs: '1.25rem', sm: '1.5rem', md: '1.75rem' },
                     mb: 0.5,
                     letterSpacing: '-0.025em',
                     lineHeight: 1.2,
@@ -171,13 +217,18 @@ const S3Dashboard: React.FC = () => {
                 >
                   AWS S3 File Manager
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: { xs: 'flex-start', sm: 'center' },
+                  gap: { xs: 1, md: 1.5 },
+                  flexDirection: { xs: 'column', sm: 'row' }
+                }}>
                   <Box
                     sx={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 0.75,
-                      px: 2,
+                      px: { xs: 1.5, md: 2 },
                       py: 0.5,
                       borderRadius: 1.5,
                       background: 'rgba(255, 255, 255, 0.1)',
@@ -199,7 +250,7 @@ const S3Dashboard: React.FC = () => {
                       sx={{ 
                         color: '#e2e8f0',
                         fontWeight: 600,
-                        fontSize: '0.75rem',
+                        fontSize: { xs: '0.7rem', md: '0.75rem' },
                       }}
                     >
                       {config?.bucketName}
@@ -207,7 +258,7 @@ const S3Dashboard: React.FC = () => {
                   </Box>
                   <Box
                     sx={{
-                      px: 2,
+                      px: { xs: 1.5, md: 2 },
                       py: 0.5,
                       borderRadius: 1.5,
                       background: 'rgba(255, 255, 255, 0.1)',
@@ -220,7 +271,7 @@ const S3Dashboard: React.FC = () => {
                       sx={{ 
                         color: '#cbd5e1',
                         fontWeight: 500,
-                        fontSize: '0.75rem',
+                        fontSize: { xs: '0.7rem', md: '0.75rem' },
                       }}
                     >
                       {config?.region}
@@ -230,30 +281,209 @@ const S3Dashboard: React.FC = () => {
               </Box>
             </Box>
             
-            <IconButton 
-              onClick={handleLogout} 
-              title="Disconnect"
-              sx={{
-                background: 'rgba(255, 255, 255, 0.1)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                color: '#e2e8f0',
-                backdropFilter: 'blur(10px)',
-                width: 40,
-                height: 40,
-                '&:hover': {
-                  background: 'rgba(255, 255, 255, 0.2)',
-                  color: '#ffffff',
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                },
-                transition: 'all 0.2s ease',
-              }}
-            >
-              <Logout sx={{ fontSize: 20 }} />
-            </IconButton>
+            {/* User Menu */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: { xs: 1.5, md: 2 },
+                  px: { xs: 2, md: 3 },
+                  py: { xs: 1, md: 1.5 },
+                  borderRadius: 3,
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  backdropFilter: 'blur(10px)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    transform: 'translateY(-1px)',
+                  },
+                }}
+                onClick={handleUserMenuOpen}
+              >
+                <Avatar
+                  src={userInfo?.picture}
+                  alt={userInfo?.name}
+                  sx={{
+                    width: { xs: 28, md: 32 },
+                    height: { xs: 28, md: 32 },
+                    border: '2px solid rgba(255, 255, 255, 0.2)',
+                    fontSize: { xs: '0.75rem', md: '0.875rem' },
+                  }}
+                >
+                  {userInfo?.name?.charAt(0).toUpperCase()}
+                </Avatar>
+                <Box sx={{ textAlign: 'left', display: { xs: 'none', sm: 'block' } }}>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: '#ffffff',
+                      fontWeight: 600,
+                      fontSize: { xs: '0.8rem', md: '0.875rem' },
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {userInfo?.name}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip 
+                      icon={isAdmin ? <AdminPanelSettings /> : <Person />}
+                      label={isAdmin ? 'Admin' : 'User'}
+                      size="small"
+                      sx={{ 
+                        height: 18,
+                        fontSize: '0.625rem',
+                        fontWeight: 600,
+                        bgcolor: isAdmin ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                        color: isAdmin ? '#fca5a5' : '#93c5fd',
+                        '& .MuiChip-icon': {
+                          fontSize: '0.75rem',
+                        },
+                      }}
+                    />
+                  </Box>
+                </Box>
+                <ExpandMore sx={{ fontSize: { xs: 18, md: 20 }, color: '#cbd5e1', display: { xs: 'none', sm: 'block' } }} />
+              </Box>
+            </Box>
           </Box>
         </Container>
       </Box>
+
+      {/* User Menu Dropdown */}
+      <Menu
+        anchorEl={userMenuAnchor}
+        open={Boolean(userMenuAnchor)}
+        onClose={handleUserMenuClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        sx={{
+          '& .MuiPaper-root': {
+            mt: 1,
+            minWidth: 280,
+            borderRadius: 3,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            background: 'linear-gradient(135deg, #ffffff 0%, #fefefe 100%)',
+            overflow: 'hidden',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '3px',
+              background: 'linear-gradient(90deg, #6366f1, #8b5cf6, #a855f7)',
+            },
+            '& .MuiMenuItem-root': {
+              borderRadius: 2,
+              mx: 2,
+              my: 0.5,
+              transition: 'all 0.2s ease',
+            },
+          },
+        }}
+      >
+        {/* User Info Header */}
+        <Box sx={{ 
+          px: 4, 
+          py: 3, 
+          borderBottom: '1px solid #f1f5f9',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+          position: 'relative',
+          pt: 4, // Add top padding for the gradient line
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <Avatar
+              src={userInfo?.picture}
+              alt={userInfo?.name}
+              sx={{
+                width: 48,
+                height: 48,
+                border: '3px solid rgba(99, 102, 241, 0.2)',
+                fontSize: '1.25rem',
+                fontWeight: 600,
+                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.15)',
+              }}
+            >
+              {userInfo?.name?.charAt(0).toUpperCase()}
+            </Avatar>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  fontWeight: 700, 
+                  color: '#0f172a', 
+                  mb: 0.5,
+                  fontSize: '1.1rem',
+                  lineHeight: 1.2,
+                  wordBreak: 'break-word',
+                }}
+              >
+                {userInfo?.name}
+              </Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: '#64748b',
+                  fontSize: '0.875rem',
+                  wordBreak: 'break-word',
+                  mb: 1,
+                }}
+              >
+                {userInfo?.email}
+              </Typography>
+              <Chip 
+                icon={isAdmin ? <AdminPanelSettings /> : <Person />}
+                label={isAdmin ? 'Administrator' : 'User'}
+                size="small"
+                sx={{ 
+                  height: 24,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  bgcolor: isAdmin ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                  color: isAdmin ? '#dc2626' : '#2563eb',
+                  border: `1px solid ${isAdmin ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                  '& .MuiChip-icon': {
+                    fontSize: '0.875rem',
+                    color: isAdmin ? '#dc2626' : '#2563eb',
+                  },
+                }}
+              />
+            </Box>
+          </Box>
+        </Box>
+        
+        {/* Menu Items */}
+        <Box sx={{ py: 2 }}>
+          <MenuItem 
+            onClick={() => {
+              handleUserMenuClose();
+              handleLogout();
+            }}
+            sx={{ 
+              color: '#dc2626',
+              fontWeight: 500,
+              py: 1.5,
+              '&:hover': {
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                color: '#b91c1c',
+              },
+            }}
+          >
+            <ListItemIcon>
+              <Logout fontSize="small" sx={{ color: 'inherit' }} />
+            </ListItemIcon>
+            <ListItemText>
+              <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                Sign Out
+              </Typography>
+            </ListItemText>
+          </MenuItem>
+        </Box>
+      </Menu>
 
       {/* Single Tab Content */}
       <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -291,7 +521,7 @@ const S3Dashboard: React.FC = () => {
                 },
               }}
             >
-              {tabConfig.map((tab) => (
+              {visibleTabs.map((tab) => (
                 <Tab
                   key={tab.path}
                   value={tab.path}
@@ -328,7 +558,7 @@ const S3Dashboard: React.FC = () => {
               <Route path="/browse" element={<BrowseTab />} />
               <Route path="/delete" element={<DeleteTab />} />
               <Route path="/schema-validation" element={<SchemaValidationTab />} />
-              <Route path="/user-management" element={<UserManagementTab />} />
+              {isAdmin && <Route path="/user-management" element={<UserManagementTab />} />}
               <Route path="/" element={<UploadTab />} />
             </Routes>
           </Box>
