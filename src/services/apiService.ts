@@ -1,6 +1,6 @@
 import { S3File, S3Folder, S3Config } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || '/api/s3';
+const API_BASE_URL = process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/s3` : '/api/s3';
 
 class ApiService {
   private isInitialized = false;
@@ -25,6 +25,15 @@ class ApiService {
   }
 
   async initialize(config: S3Config): Promise<void> {
+    // For server-managed configuration, skip the /init endpoint
+    // since AWS credentials are managed on the server
+    if (config.bucketName === 'server-managed' && config.region === 'server-managed') {
+      console.log('🔧 Using server-managed AWS configuration');
+      this.isInitialized = true;
+      return;
+    }
+
+    // For client-side configuration, call the init endpoint
     const response = await fetch(`${API_BASE_URL}/init`, {
       method: 'POST',
       headers: {

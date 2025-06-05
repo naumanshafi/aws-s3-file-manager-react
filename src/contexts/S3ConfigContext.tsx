@@ -58,21 +58,29 @@ export const S3ConfigProvider: React.FC<S3ConfigProviderProps> = ({ children }) 
 
   const setConfig = async (newConfig: S3Config) => {
     try {
-      // Initialize the API service first
-      await apiService.initialize(newConfig);
+      // Try to initialize the API service first
+      try {
+        await apiService.initialize(newConfig);
+        console.log('✅ Backend API service initialized successfully');
+      } catch (apiError) {
+        console.warn('⚠️ Backend server not available, proceeding with local config only:', apiError);
+        // Continue without API initialization - the backend might not be running
+        // This allows the frontend to work in development mode
+      }
       
       setConfigState(newConfig);
       
-      // Save to localStorage (excluding sensitive data for security)
+      // Save to localStorage
       const configToSave = {
         bucketName: newConfig.bucketName,
         region: newConfig.region,
         roleArn: newConfig.roleArn,
-        // Store credentials (in production, consider more secure storage)
         accessKeyId: newConfig.accessKeyId,
         secretAccessKey: newConfig.secretAccessKey,
       };
       localStorage.setItem('s3Config', JSON.stringify(configToSave));
+      
+      console.log('✅ S3 configuration saved locally');
     } catch (error) {
       console.error('Failed to set S3 config:', error);
       throw error;

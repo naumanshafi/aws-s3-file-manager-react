@@ -5,8 +5,8 @@ import { CssBaseline } from '@mui/material';
 import { Toaster } from 'react-hot-toast';
 import { BrowserRouter as Router } from 'react-router-dom';
 import { S3ConfigProvider, useS3Config } from './contexts/S3ConfigContext';
-import S3ConfigSetup from './components/S3ConfigSetup';
 import S3Dashboard from './components/S3Dashboard';
+import GoogleAuthSetup from './components/S3ConfigSetup';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -93,7 +93,7 @@ const theme = createTheme({
 const AppContent: React.FC = () => {
   const { isConfigured } = useS3Config();
 
-  return isConfigured ? <S3Dashboard /> : <S3ConfigSetup />;
+  return isConfigured ? <S3Dashboard /> : <GoogleAuthSetup />;
 };
 
 function App() {
