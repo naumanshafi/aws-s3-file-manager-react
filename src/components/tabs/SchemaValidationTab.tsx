@@ -63,7 +63,9 @@ const SchemaValidationTab: React.FC = () => {
     formData.append('schema', schemaFile);
     formData.append('data', dataFile);
 
-    const apiUrl = process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL.replace('/api/s3', '')}/api/schema/validate` : '/api/schema/validate';
+    // Fix the API URL construction to avoid double /api
+    const baseUrl = process.env.REACT_APP_API_URL ? process.env.REACT_APP_API_URL.replace('/s3', '') : '/api';
+    const apiUrl = `${baseUrl}/schema/validate`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',

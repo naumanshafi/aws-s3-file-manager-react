@@ -1,26 +1,5 @@
 {
   "activities": [
-    {
-      "id": "act_1749210893174_9alupsnwu",
-      "userEmail": "admin@turing.com",
-      "userName": "admin@turing.com",
-      "action": "download",
-      "fileName": "2b2a9a19-8a07-4b5a-bd28-72717f91d16f_SO-63904-20250527-20250531.json",
-      "fileSize": "54.23 KB",
-      "timestamp": "2025-06-06T11:54:53.174Z",
-      "status": "success",
-      "details": "File download initiated via iframe: Advanced Math Reasoning QA Data Format and Examples - 3P/inputData/2025-05-27/annotation_inputs/input_files/2b2a9a19-8a07-4b5a-bd28-72717f91d16f_SO-63904-20250527-20250531.json"
-    },
-    {
-      "id": "act_1749210893028_7pz5yrzt3",
-      "userEmail": "admin@turing.com",
-      "userName": "admin@turing.com",
-      "action": "download",
-      "fileName": "2b2a9a19-8a07-4b5a-bd28-72717f91d16f_SO-63904-20250527-20250531.json",
-      "fileSize": "0.05 MB",
-      "timestamp": "2025-06-06T11:54:53.028Z",
-      "status": "success",
-      "details": "Download URL generated for Advanced Math Reasoning QA Data Format and Examples - 3P/inputData/2025-05-27/annotation_inputs/input_files/2b2a9a19-8a07-4b5a-bd28-72717f91d16f_SO-63904-20250527-20250531.json (expires in 3600s)"
-    }
+    
   ]
 }

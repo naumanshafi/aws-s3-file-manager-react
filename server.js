@@ -791,6 +791,9 @@ app.post('/api/schema/validate', upload.fields([
     // Call Python validation script
     const pythonScript = path.join(__dirname, 'schema_validator.py');
     const pythonPath = path.join(__dirname, 'venv', 'bin', 'python');
+    
+    let responseAlreadySent = false;
+    
     const pythonProcess = spawn(pythonPath, [pythonScript, schemaFilePath, dataFilePath]);
     
     let output = '';
@@ -805,6 +808,8 @@ app.post('/api/schema/validate', upload.fields([
     });
     
     pythonProcess.on('close', (code) => {
+      if (responseAlreadySent) return;
+      
       // Clean up temporary files
       try {
         if (fs.existsSync(schemaFilePath)) fs.unlinkSync(schemaFilePath);
@@ -816,9 +821,11 @@ app.post('/api/schema/validate', upload.fields([
       if (code === 0) {
         try {
           const result = JSON.parse(output);
+          responseAlreadySent = true;
           res.json(result);
         } catch (parseError) {
           console.error('Error parsing Python output:', parseError);
+          responseAlreadySent = true;
           res.status(500).json({ 
             error: 'Failed to parse validation results',
             details: output 
@@ -826,6 +833,7 @@ app.post('/api/schema/validate', upload.fields([
         }
       } else {
         console.error('Python script error:', errorOutput);
+        responseAlreadySent = true;
         res.status(500).json({ 
           error: 'Schema validation failed',
           details: errorOutput || output 
@@ -834,6 +842,8 @@ app.post('/api/schema/validate', upload.fields([
     });
     
     pythonProcess.on('error', (error) => {
+      if (responseAlreadySent) return;
+      
       console.error('Failed to start Python process:', error);
       
       // Clean up temporary files
@@ -844,6 +854,7 @@ app.post('/api/schema/validate', upload.fields([
         console.error('Error cleaning up temp files:', cleanupError);
       }
       
+      responseAlreadySent = true;
       res.status(500).json({ 
         error: 'Failed to execute validation script',
         details: error.message 
