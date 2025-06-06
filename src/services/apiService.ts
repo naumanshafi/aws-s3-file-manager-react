@@ -329,6 +329,20 @@ class ApiService {
         if (downloadSuccess) {
           completed++;
           
+          // Log successful download activity
+          try {
+            await this.logDownloadActivity(
+              fileName,
+              'unknown', // We don't have size info in bulk download
+              key,
+              'success',
+              `File downloaded via bulk download: ${key}`
+            );
+          } catch (logError) {
+            console.warn(`Failed to log download activity for ${fileName}:`, logError);
+            // Don't fail the download if logging fails
+          }
+          
           // Longer delay between downloads to ensure browser processes each one
           if (completed < total) {
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -337,6 +351,20 @@ class ApiService {
         
       } catch (error) {
         console.error(`Failed to download ${fileName}:`, error);
+        
+        // Log failed download activity
+        try {
+          await this.logDownloadActivity(
+            fileName,
+            'unknown',
+            key,
+            'failed',
+            `Bulk download failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+          );
+        } catch (logError) {
+          console.warn(`Failed to log failed download activity for ${fileName}:`, logError);
+        }
+        
         // Continue with next file even if one fails
         completed++;
       }
@@ -355,6 +383,31 @@ class ApiService {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  async logDownloadActivity(fileName: string, fileSize: string, fileKey: string, status: 'success' | 'failed' = 'success', details?: string): Promise<void> {
+    if (!this.isInitialized) {
+      throw new Error('API service not initialized');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/activities/log-download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        fileName, 
+        fileSize, 
+        fileKey, 
+        status, 
+        details 
+      }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to log download activity');
+    }
   }
 }
 

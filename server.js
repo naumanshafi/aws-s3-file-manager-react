@@ -4,7 +4,7 @@ require('dotenv').config({
 
 const express = require('express');
 const cors = require('cors');
-const { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
 const { STSClient, AssumeRoleCommand } = require('@aws-sdk/client-sts');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const multer = require('multer');
@@ -17,6 +17,9 @@ const PORT = process.env.BACKEND_PORT || process.env.PORT || 5001;
 
 // Path for authorized users JSON file
 const AUTHORIZED_USERS_FILE = path.join(__dirname, 'data', 'authorized-users.json');
+
+// Path for activity logs JSON file
+const ACTIVITY_LOGS_FILE = path.join(__dirname, 'data', 'activity.json');
 
 // Ensure data directory exists
 const dataDir = path.dirname(AUTHORIZED_USERS_FILE);
@@ -67,6 +70,72 @@ function saveAuthorizedUsers(usersData) {
   }
 }
 
+// Initialize activity logs file if it doesn't exist
+function initializeActivityLogsFile() {
+  if (!fs.existsSync(ACTIVITY_LOGS_FILE)) {
+    const defaultActivities = {
+      activities: []
+    };
+    fs.writeFileSync(ACTIVITY_LOGS_FILE, JSON.stringify(defaultActivities, null, 2));
+    console.log('✅ Initialized activity logs file');
+  }
+}
+
+// Load activity logs from JSON file
+function loadActivityLogs() {
+  try {
+    if (fs.existsSync(ACTIVITY_LOGS_FILE)) {
+      const data = fs.readFileSync(ACTIVITY_LOGS_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+    return { activities: [] };
+  } catch (error) {
+    console.error('❌ Error loading activity logs:', error);
+    return { activities: [] };
+  }
+}
+
+// Save activity logs to JSON file
+function saveActivityLogs(activityData) {
+  try {
+    fs.writeFileSync(ACTIVITY_LOGS_FILE, JSON.stringify(activityData, null, 2));
+    return true;
+  } catch (error) {
+    console.error('❌ Error saving activity logs:', error);
+    return false;
+  }
+}
+
+// Helper function to log user activity
+function logActivity(userEmail, userName, action, fileName, fileSize, status, details) {
+  try {
+    const activityData = loadActivityLogs();
+    const newActivity = {
+      id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userEmail,
+      userName,
+      action, // 'upload', 'download', 'delete'
+      fileName,
+      fileSize,
+      timestamp: new Date().toISOString(),
+      status, // 'success', 'failed'
+      details
+    };
+    
+    activityData.activities.unshift(newActivity); // Add to beginning
+    
+    // Keep only the last 1000 activities to prevent file from growing too large
+    if (activityData.activities.length > 1000) {
+      activityData.activities = activityData.activities.slice(0, 1000);
+    }
+    
+    saveActivityLogs(activityData);
+    console.log(`📝 Activity logged: ${userEmail} - ${action} - ${fileName} - ${status}`);
+  } catch (error) {
+    console.error('❌ Error logging activity:', error);
+  }
+}
+
 // Middleware to check if user is authorized
 function checkUserAuthorization(req, res, next) {
   // For development/testing, allow localhost access
@@ -112,6 +181,9 @@ function requireAdmin(req, res, next) {
 
 // Initialize authorized users file on startup
 initializeAuthorizedUsersFile();
+
+// Initialize activity logs file on startup
+initializeActivityLogsFile();
 
 // Log environment and port information
 console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
@@ -169,7 +241,7 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-email']
 }));
 
 app.use(express.json());
@@ -458,13 +530,15 @@ app.get('/api/s3/files', ensureS3Client, async (req, res) => {
 });
 
 // Upload file
-app.post('/api/s3/upload', ensureS3Client, upload.single('file'), async (req, res) => {
+app.post('/api/s3/upload', checkUserAuthorization, ensureS3Client, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file provided' });
     }
     
     const { key } = req.body;
+    const fileName = key.split('/').pop() || req.file.originalname || 'unknown-file';
+    const fileSize = `${(req.file.size / (1024 * 1024)).toFixed(2)} MB`;
     
     const command = new PutObjectCommand({
       Bucket: bucketName,
@@ -474,9 +548,35 @@ app.post('/api/s3/upload', ensureS3Client, upload.single('file'), async (req, re
     });
     
     await s3Client.send(command);
+    
+    // Log successful upload activity
+    logActivity(
+      req.user.email,
+      req.user.name || req.user.email,
+      'upload',
+      fileName,
+      fileSize,
+      'success',
+      `File uploaded to ${key}`
+    );
+    
     res.json({ success: true, message: 'File uploaded successfully' });
   } catch (error) {
     console.error('Upload error:', error);
+    
+    // Log failed upload activity
+    const fileName = req.body?.key?.split('/').pop() || req.file?.originalname || 'unknown-file';
+    const fileSize = req.file ? `${(req.file.size / (1024 * 1024)).toFixed(2)} MB` : 'unknown';
+    
+    logActivity(
+      req.user?.email || 'unknown',
+      req.user?.name || req.user?.email || 'unknown',
+      'upload',
+      fileName,
+      fileSize,
+      'failed',
+      `Upload failed: ${error.message}`
+    );
     
     // Check if this is an expired token error
     const expiredResponse = handleExpiredTokenError(res, error);
@@ -487,12 +587,27 @@ app.post('/api/s3/upload', ensureS3Client, upload.single('file'), async (req, re
 });
 
 // Delete file
-app.delete('/api/s3/delete', ensureS3Client, async (req, res) => {
+app.delete('/api/s3/delete', checkUserAuthorization, ensureS3Client, async (req, res) => {
   try {
     const { key } = req.body;
     
     if (!key) {
       return res.status(400).json({ error: 'File key is required' });
+    }
+    
+    const fileName = key.split('/').pop() || 'unknown-file';
+    
+    // Get file size before deletion (optional - we could skip this to avoid extra API call)
+    let fileSize = 'unknown';
+    try {
+      const headCommand = new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+      const headResponse = await s3Client.send(headCommand);
+      fileSize = `${(headResponse.ContentLength / (1024 * 1024)).toFixed(2)} MB`;
+    } catch (headError) {
+      console.log('Could not get file size before deletion:', headError.message);
     }
     
     const command = new DeleteObjectCommand({
@@ -501,9 +616,34 @@ app.delete('/api/s3/delete', ensureS3Client, async (req, res) => {
     });
     
     await s3Client.send(command);
+    
+    // Log successful delete activity
+    logActivity(
+      req.user.email,
+      req.user.name || req.user.email,
+      'delete',
+      fileName,
+      fileSize,
+      'success',
+      `File deleted from ${key}`
+    );
+    
     res.json({ success: true, message: 'File deleted successfully' });
   } catch (error) {
     console.error('Delete error:', error);
+    
+    // Log failed delete activity
+    const fileName = req.body?.key?.split('/').pop() || 'unknown-file';
+    
+    logActivity(
+      req.user?.email || 'unknown',
+      req.user?.name || req.user?.email || 'unknown',
+      'delete',
+      fileName,
+      'unknown',
+      'failed',
+      `Delete failed: ${error.message}`
+    );
     
     // Check if this is an expired token error
     const expiredResponse = handleExpiredTokenError(res, error);
@@ -514,7 +654,7 @@ app.delete('/api/s3/delete', ensureS3Client, async (req, res) => {
 });
 
 // Generate presigned URL
-app.post('/api/s3/presigned', ensureS3Client, async (req, res) => {
+app.post('/api/s3/presigned', checkUserAuthorization, ensureS3Client, async (req, res) => {
   try {
     const { key, expiresIn = 3600 } = req.body;
     
@@ -524,6 +664,19 @@ app.post('/api/s3/presigned', ensureS3Client, async (req, res) => {
     
     // Extract filename from key for Content-Disposition header
     const fileName = key.split('/').pop() || 'download';
+    
+    // Get file size for logging
+    let fileSize = 'unknown';
+    try {
+      const headCommand = new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+      const headResponse = await s3Client.send(headCommand);
+      fileSize = `${(headResponse.ContentLength / (1024 * 1024)).toFixed(2)} MB`;
+    } catch (headError) {
+      console.log('Could not get file size for download logging:', headError.message);
+    }
     
     // Sanitize filename to prevent issues
     const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -540,14 +693,65 @@ app.post('/api/s3/presigned', ensureS3Client, async (req, res) => {
     
     console.log(`Generated presigned URL for download: ${fileName}`);
     
+    // Log successful download activity
+    logActivity(
+      req.user.email,
+      req.user.name || req.user.email,
+      'download',
+      fileName,
+      fileSize,
+      'success',
+      `Download URL generated for ${key} (expires in ${expiresIn}s)`
+    );
+    
     res.json({ url });
   } catch (error) {
     console.error('Presigned URL error:', error);
+    
+    // Log failed download activity
+    const fileName = req.body?.key?.split('/').pop() || 'unknown-file';
+    
+    logActivity(
+      req.user?.email || 'unknown',
+      req.user?.name || req.user?.email || 'unknown',
+      'download',
+      fileName,
+      'unknown',
+      'failed',
+      `Download URL generation failed: ${error.message}`
+    );
     
     // Check if this is an expired token error
     const expiredResponse = handleExpiredTokenError(res, error);
     if (expiredResponse) return expiredResponse;
     
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Log download activity
+app.post('/api/s3/activities/log-download', checkUserAuthorization, async (req, res) => {
+  try {
+    const { fileName, fileSize, fileKey, status = 'success', details } = req.body;
+    
+    if (!fileName || !fileKey) {
+      return res.status(400).json({ error: 'fileName and fileKey are required' });
+    }
+    
+    // Log the download activity
+    logActivity(
+      req.user.email,
+      req.user.name || req.user.email,
+      'download',
+      fileName,
+      fileSize || 'unknown',
+      status,
+      details || `File downloaded: ${fileKey}`
+    );
+    
+    res.json({ success: true, message: 'Download activity logged successfully' });
+  } catch (error) {
+    console.error('Log download activity error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -855,6 +1059,38 @@ app.delete('/api/users/authorized/:email', checkUserAuthorization, requireAdmin,
     res.status(500).json({ 
       error: 'DELETE_USER_FAILED', 
       message: 'Failed to delete user from authorized users list.' 
+    });
+  }
+});
+
+// ============================================
+// ACTIVITY LOGS API ENDPOINTS
+// ============================================
+
+// Get activity logs (admin only)
+app.get('/api/activities', checkUserAuthorization, requireAdmin, (req, res) => {
+  try {
+    const activityData = loadActivityLogs();
+    const activities = activityData.activities || [];
+    
+    // Calculate statistics
+    const stats = {
+      totalUploads: activities.filter(a => a.action === 'upload').length,
+      totalDownloads: activities.filter(a => a.action === 'download').length,
+      totalDeletes: activities.filter(a => a.action === 'delete').length,
+      totalUsers: new Set(activities.map(a => a.userEmail)).size,
+    };
+    
+    res.json({
+      activities: activities.slice(0, 100), // Return last 100 activities
+      totalCount: activities.length,
+      stats
+    });
+  } catch (error) {
+    console.error('❌ Error fetching activities:', error);
+    res.status(500).json({ 
+      error: 'FETCH_ACTIVITIES_FAILED', 
+      message: 'Failed to fetch activity logs.' 
     });
   }
 });
