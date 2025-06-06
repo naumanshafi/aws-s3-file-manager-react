@@ -29,6 +29,7 @@ import {
   AdminPanelSettings,
   AccountCircle,
   ExpandMore,
+  Timeline,
 } from '@mui/icons-material';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useS3Config } from '../contexts/S3ConfigContext';
@@ -39,6 +40,7 @@ import BrowseTab from './tabs/BrowseTab';
 import DeleteTab from './tabs/DeleteTab';
 import SchemaValidationTab from './tabs/SchemaValidationTab';
 import UserManagementTab from './tabs/UserManagementTab';
+import ActivityTab from './tabs/ActivityTab';
 
 const S3Dashboard: React.FC = () => {
   const { config, clearConfig } = useS3Config();
@@ -107,6 +109,13 @@ const S3Dashboard: React.FC = () => {
       label: 'User Management',
       icon: <SupervisorAccount />,
       component: <UserManagementTab />,
+      visible: isAdmin, // Only show to admin users
+    },
+    {
+      path: '/activity',
+      label: 'Activity',
+      icon: <Timeline />,
+      component: <ActivityTab />,
       visible: isAdmin, // Only show to admin users
     },
   ];
@@ -559,6 +568,7 @@ const S3Dashboard: React.FC = () => {
               <Route path="/delete" element={<DeleteTab />} />
               <Route path="/schema-validation" element={<SchemaValidationTab />} />
               {isAdmin && <Route path="/user-management" element={<UserManagementTab />} />}
+              {isAdmin && <Route path="/activity" element={<ActivityTab />} />}
               <Route path="/" element={<UploadTab />} />
             </Routes>
           </Box>

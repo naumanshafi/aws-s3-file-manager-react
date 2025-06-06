@@ -37,3 +37,6 @@ Thumbs.db
 
 # Package lock files (can cause conflicts in teams)
 package-lock.json
+
+./data/authorized-users.json
+./data/activity.json

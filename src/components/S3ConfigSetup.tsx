@@ -395,46 +395,46 @@ const GoogleAuthSetup: React.FC = () => {
                 >
                   AWS S3 File Manager
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: '#cbd5e1',
-                    fontWeight: 500,
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        color: '#cbd5e1',
+                        fontWeight: 500,
                     fontSize: { xs: '0.8rem', sm: '0.875rem', md: '0.9rem', lg: '1rem' },
                     mt: 0.5,
-                  }}
-                >
+                      }}
+                    >
                   with JSON Schema Validation
-                </Typography>
+                    </Typography>
               </Box>
             </Box>
           </Box>
         </Container>
       </Box>
 
-      {/* Main Content */}
+             {/* Main Content */}
       <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', py: { xs: 4, md: 6 } }}>
         <Container maxWidth="sm">
           {authStep === 'success' && user ? (
             // Success State
             <Card
-              sx={{
-                borderRadius: 4,
-                border: '1px solid #e2e8f0',
+             sx={{
+               borderRadius: 4,
+               border: '1px solid #e2e8f0',
                 boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-                overflow: 'hidden',
-                position: 'relative',
-                '&::before': {
-                  content: '""',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: '4px',
+               overflow: 'hidden',
+               position: 'relative',
+               '&::before': {
+                 content: '""',
+                 position: 'absolute',
+                 top: 0,
+                 left: 0,
+                 right: 0,
+                 height: '4px',
                   background: 'linear-gradient(90deg, #10b981, #059669)',
-                },
-              }}
-            >
+               },
+             }}
+           >
               <CardContent sx={{ p: { xs: 4, md: 6 }, textAlign: 'center' }}>
                 <CheckCircle sx={{ fontSize: { xs: 48, md: 64 }, color: 'success.main', mb: 3 }} />
                 
@@ -455,11 +455,11 @@ const GoogleAuthSetup: React.FC = () => {
                   You're now authenticated and ready to manage your S3 files.
                 </Typography>
 
-                {error && (
+            {error && (
                   <Alert severity="error" sx={{ mb: 4, textAlign: 'left' }}>
-                    {error}
-                  </Alert>
-                )}
+                {error}
+              </Alert>
+            )}
 
                 <Avatar
                   src={user.picture}
@@ -524,7 +524,7 @@ const GoogleAuthSetup: React.FC = () => {
                         fontSize: { xs: '0.9rem', md: '1rem' },
                         textTransform: 'none',
                         boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
-                        '&:hover': {
+                          '&:hover': {
                           background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
                           transform: 'translateY(-1px)',
                           boxShadow: '0 6px 16px rgba(99, 102, 241, 0.5)',
@@ -536,7 +536,7 @@ const GoogleAuthSetup: React.FC = () => {
                   )}
                   
                   <Button
-                    variant="outlined"
+                      variant="outlined"
                     onClick={handleSignOut}
                     disabled={isLoading}
                     sx={{ 
@@ -556,7 +556,7 @@ const GoogleAuthSetup: React.FC = () => {
           ) : (
             // Sign-in State
             <Card
-              sx={{
+                      sx={{ 
                 borderRadius: 4,
                 border: '1px solid #e2e8f0',
                 boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
@@ -611,7 +611,7 @@ const GoogleAuthSetup: React.FC = () => {
                 {error && (
                   <Alert 
                     severity="error" 
-                    sx={{ 
+                      sx={{
                       mb: 4, 
                       textAlign: 'left',
                       borderRadius: 2,
@@ -635,7 +635,7 @@ const GoogleAuthSetup: React.FC = () => {
                       sx={{ 
                         background: 'linear-gradient(135deg, #4285f4 0%, #3367d6 100%)',
                         color: 'white',
-                        fontWeight: 600,
+                          fontWeight: 600,
                         py: { xs: 1.5, md: 2 },
                         px: { xs: 4, md: 6 },
                         borderRadius: 2,
@@ -643,7 +643,7 @@ const GoogleAuthSetup: React.FC = () => {
                         textTransform: 'none',
                         mb: 3,
                         boxShadow: '0 4px 12px rgba(66, 133, 244, 0.4)',
-                        '&:hover': {
+                          '&:hover': {
                           background: 'linear-gradient(135deg, #3367d6 0%, #1d4ed8 100%)',
                           transform: 'translateY(-1px)',
                           boxShadow: '0 6px 16px rgba(66, 133, 244, 0.5)',
@@ -694,13 +694,13 @@ const GoogleAuthSetup: React.FC = () => {
                           <FolderOpen sx={{ color: '#6366f1', fontSize: 20 }} />
                           <Typography variant="body2" sx={{ color: '#64748b', fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
                             Browse S3 Buckets
-                          </Typography>
-                        </Box>
+                    </Typography>
+                  </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                           <AdminPanelSettings sx={{ color: '#6366f1', fontSize: 20 }} />
                           <Typography variant="body2" sx={{ color: '#64748b', fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
                             User Management
-                          </Typography>
+                    </Typography>
                         </Box>
                       </Box>
                     </Box>

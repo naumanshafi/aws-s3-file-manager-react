@@ -120,6 +120,9 @@ const FileList: React.FC<FileListProps> = ({
     try {
       const url = await presignedUrlMutation.mutateAsync(file.key);
       
+      // Format file size for logging
+      const fileSizeFormatted = apiService.formatFileSize(file.size);
+      
       // Method 1: Always use fetch to get the file as a blob and force download
       try {
         const response = await fetch(url, {
@@ -168,6 +171,20 @@ const FileList: React.FC<FileListProps> = ({
         console.log(`Successfully downloaded: ${downloadFileName}`);
         toast.success(`Download started: ${fileName}`, { id: loadingToast });
         
+        // Log successful download activity
+        try {
+          await apiService.logDownloadActivity(
+            fileName,
+            fileSizeFormatted,
+            file.key,
+            'success',
+            `File downloaded successfully: ${file.key}`
+          );
+        } catch (logError) {
+          console.warn('Failed to log download activity:', logError);
+          // Don't fail the download if logging fails
+        }
+        
       } catch (fetchError) {
         console.warn('Blob download failed, trying alternative method:', fetchError);
         
@@ -185,6 +202,19 @@ const FileList: React.FC<FileListProps> = ({
           
           console.log(`Initiated download via iframe: ${fileName}`);
           toast.success(`Download started: ${fileName}`, { id: loadingToast });
+          
+          // Log download activity (iframe method - assume success)
+          try {
+            await apiService.logDownloadActivity(
+              fileName,
+              fileSizeFormatted,
+              file.key,
+              'success',
+              `File download initiated via iframe: ${file.key}`
+            );
+          } catch (logError) {
+            console.warn('Failed to log download activity:', logError);
+          }
           
         } catch (iframeError) {
           console.warn('Iframe download failed, using direct link:', iframeError);
@@ -206,6 +236,19 @@ const FileList: React.FC<FileListProps> = ({
           
           console.log(`Fallback download attempted: ${downloadFileName}`);
           toast.success(`Download initiated: ${fileName}`, { id: loadingToast });
+          
+          // Log download activity (fallback method - assume success)
+          try {
+            await apiService.logDownloadActivity(
+              fileName,
+              fileSizeFormatted,
+              file.key,
+              'success',
+              `File download attempted via fallback method: ${file.key}`
+            );
+          } catch (logError) {
+            console.warn('Failed to log download activity:', logError);
+          }
         }
       }
       
@@ -213,6 +256,20 @@ const FileList: React.FC<FileListProps> = ({
       console.error('Download failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast.error(`Download failed: ${fileName} - ${errorMessage}`, { id: loadingToast });
+      
+      // Log failed download activity
+      try {
+        const fileSizeFormatted = apiService.formatFileSize(file.size);
+        await apiService.logDownloadActivity(
+          fileName,
+          fileSizeFormatted,
+          file.key,
+          'failed',
+          `Download failed: ${errorMessage}`
+        );
+      } catch (logError) {
+        console.warn('Failed to log failed download activity:', logError);
+      }
     } finally {
       setDownloadingFiles(prev => {
         const newSet = new Set(prev);
