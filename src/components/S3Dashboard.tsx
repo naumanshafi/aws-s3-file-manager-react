@@ -95,7 +95,7 @@ const S3Dashboard: React.FC = () => {
       label: 'Delete',
       icon: <Delete />,
       component: <DeleteTab />,
-      visible: true,
+      visible: isAdmin, // Only show to admin users
     },
     {
       path: '/schema-validation',
