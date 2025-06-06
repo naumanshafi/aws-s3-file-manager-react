@@ -123,52 +123,22 @@ const FileList: React.FC<FileListProps> = ({
       // Format file size for logging
       const fileSizeFormatted = apiService.formatFileSize(file.size);
       
-      // Method 1: Always use fetch to get the file as a blob and force download
+      // Method 1: Use window.open() to avoid CORS issues with S3 presigned URLs
       try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Cache-Control': 'no-cache',
-          },
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        // Get the content type from response headers
-        const contentType = response.headers.get('content-type') || 'application/octet-stream';
-        
-        const blob = await response.blob();
-        
-        // Create a new blob with the correct MIME type to ensure download
-        const downloadBlob = new Blob([blob], { 
-          type: 'application/octet-stream' // Force download by using generic binary type
-        });
-        
-        const blobUrl = window.URL.createObjectURL(downloadBlob);
-        
-        // Create download link with folder structure preserved
+        // Create a temporary link element for download
         const downloadLink = document.createElement('a');
-        downloadLink.href = blobUrl;
-        downloadLink.download = downloadFileName; // This preserves folder structure
+        downloadLink.href = url;
+        downloadLink.download = downloadFileName;
         downloadLink.style.display = 'none';
-        
-        // Force download attributes
-        downloadLink.setAttribute('download', downloadFileName);
-        downloadLink.setAttribute('target', '_self');
+        downloadLink.setAttribute('target', '_blank');
+        downloadLink.setAttribute('rel', 'noopener noreferrer');
         
         // Add to DOM, click, and remove
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
         
-        // Clean up the blob URL after a short delay
-        setTimeout(() => {
-          window.URL.revokeObjectURL(blobUrl);
-        }, 1000);
-        
-        console.log(`Successfully downloaded: ${downloadFileName}`);
+        console.log(`Successfully initiated download: ${downloadFileName}`);
         toast.success(`Download started: ${fileName}`, { id: loadingToast });
         
         // Log successful download activity
@@ -178,32 +148,38 @@ const FileList: React.FC<FileListProps> = ({
             fileSizeFormatted,
             file.key,
             'success',
-            `File downloaded successfully: ${file.key}`
+            `File download started: ${file.key}`
           );
         } catch (logError) {
           console.warn('Failed to log download activity:', logError);
           // Don't fail the download if logging fails
         }
         
-      } catch (fetchError) {
-        console.warn('Blob download failed, trying alternative method:', fetchError);
+      } catch (linkError) {
+        console.warn('Direct link download failed, trying iframe method:', linkError);
         
         // Method 2: Create a hidden iframe to force download
         try {
           const iframe = document.createElement('iframe');
           iframe.style.display = 'none';
+          iframe.style.position = 'absolute';
+          iframe.style.left = '-9999px';
           iframe.src = url;
           document.body.appendChild(iframe);
           
           // Remove iframe after download starts
           setTimeout(() => {
-            document.body.removeChild(iframe);
-          }, 5000);
+            try {
+              document.body.removeChild(iframe);
+            } catch (removeError) {
+              console.warn('Failed to remove iframe:', removeError);
+            }
+          }, 10000);
           
           console.log(`Initiated download via iframe: ${fileName}`);
           toast.success(`Download started: ${fileName}`, { id: loadingToast });
           
-          // Log download activity (iframe method - assume success)
+          // Log download activity (iframe method)
           try {
             await apiService.logDownloadActivity(
               fileName,
@@ -217,34 +193,22 @@ const FileList: React.FC<FileListProps> = ({
           }
           
         } catch (iframeError) {
-          console.warn('Iframe download failed, using direct link:', iframeError);
+          console.warn('Iframe download failed, opening in new window:', iframeError);
           
-          // Method 3: Fallback to direct link with download attribute
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = downloadFileName;
-          link.style.display = 'none';
+          // Method 3: Fallback to opening in new window
+          window.open(url, '_blank', 'noopener,noreferrer');
           
-          // Force download by setting additional attributes
-          link.setAttribute('download', downloadFileName);
-          link.setAttribute('target', '_blank');
-          link.setAttribute('rel', 'noopener noreferrer');
+          console.log(`Opened download in new window: ${downloadFileName}`);
+          toast.success(`Download opened in new window: ${fileName}`, { id: loadingToast });
           
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          console.log(`Fallback download attempted: ${downloadFileName}`);
-          toast.success(`Download initiated: ${fileName}`, { id: loadingToast });
-          
-          // Log download activity (fallback method - assume success)
+          // Log download activity (new window method)
           try {
             await apiService.logDownloadActivity(
               fileName,
               fileSizeFormatted,
               file.key,
               'success',
-              `File download attempted via fallback method: ${file.key}`
+              `File download opened in new window: ${file.key}`
             );
           } catch (logError) {
             console.warn('Failed to log download activity:', logError);
