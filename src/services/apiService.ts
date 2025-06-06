@@ -1,9 +1,25 @@
 import { S3File, S3Folder, S3Config } from '../types';
+import { authService } from './authService';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/s3` : '/api/s3';
 
 class ApiService {
   private isInitialized = false;
+
+  // Helper method to get headers with authentication
+  private getAuthHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      ...authService.getAuthHeaders()
+    };
+  }
+
+  // Helper method to get headers for multipart uploads (no Content-Type)
+  private getAuthHeadersForUpload(): Record<string, string> {
+    return {
+      ...authService.getAuthHeaders()
+    };
+  }
 
   // Helper method to handle API responses and check for expired tokens
   private async handleResponse(response: Response): Promise<any> {
@@ -36,9 +52,7 @@ class ApiService {
     // For client-side configuration, call the init endpoint
     const response = await fetch(`${API_BASE_URL}/init`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify(config),
     });
 
@@ -55,7 +69,9 @@ class ApiService {
       throw new Error('API service not initialized');
     }
 
-    const response = await fetch(`${API_BASE_URL}/test`);
+    const response = await fetch(`${API_BASE_URL}/test`, {
+      headers: this.getAuthHeaders(),
+    });
     return await this.handleResponse(response);
   }
 
@@ -64,7 +80,9 @@ class ApiService {
       throw new Error('API service not initialized');
     }
 
-    const response = await fetch(`${API_BASE_URL}/folders`);
+    const response = await fetch(`${API_BASE_URL}/folders`, {
+      headers: this.getAuthHeaders(),
+    });
     return await this.handleResponse(response);
   }
 
@@ -73,7 +91,9 @@ class ApiService {
       throw new Error('API service not initialized');
     }
 
-    const response = await fetch(`${API_BASE_URL}/folders?prefix=${encodeURIComponent(prefix)}`);
+    const response = await fetch(`${API_BASE_URL}/folders?prefix=${encodeURIComponent(prefix)}`, {
+      headers: this.getAuthHeaders(),
+    });
     return await this.handleResponse(response);
   }
 
@@ -82,7 +102,9 @@ class ApiService {
       throw new Error('API service not initialized');
     }
 
-    const response = await fetch(`${API_BASE_URL}/files?prefix=${encodeURIComponent(prefix)}`);
+    const response = await fetch(`${API_BASE_URL}/files?prefix=${encodeURIComponent(prefix)}`, {
+      headers: this.getAuthHeaders(),
+    });
     
     if (!response.ok) {
       const error = await response.json();
@@ -125,6 +147,7 @@ class ApiService {
       try {
         const response = await fetch(`${API_BASE_URL}/upload`, {
           method: 'POST',
+          headers: this.getAuthHeadersForUpload(),
           body: formData,
         });
 
@@ -143,6 +166,7 @@ class ApiService {
     } else {
       const response = await fetch(`${API_BASE_URL}/upload`, {
         method: 'POST',
+        headers: this.getAuthHeadersForUpload(),
         body: formData,
       });
 
@@ -160,9 +184,7 @@ class ApiService {
 
     const response = await fetch(`${API_BASE_URL}/delete`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({ key }),
     });
 
@@ -179,9 +201,7 @@ class ApiService {
 
     const response = await fetch(`${API_BASE_URL}/presigned`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({ key, expiresIn }),
     });
     
@@ -392,9 +412,7 @@ class ApiService {
 
     const response = await fetch(`${API_BASE_URL}/activities/log-download`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({ 
         fileName, 
         fileSize, 
